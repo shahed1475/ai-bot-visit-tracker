@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Bot Visit Tracker - Live Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: #4a5568;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .visits-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .visit-item {
+            background: #f8f9fa;
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #28a745;
+            transition: all 0.3s ease;
+        }
+
+        .visit-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .visit-bot {
+            font-weight: bold;
+            color: #495057;
+            font-size: 1.1rem;
+        }
+
+        .visit-details {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .visit-url {
+            color: #007bff;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .visit-url:hover {
+            text-decoration: underline;
+        }
+
+        .classification {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .classification.indexing {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .classification.retrieval {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .classification.unknown {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin: 0 10px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #5a67d8;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn.secondary {
+            background: #48bb78;
+        }
+
+        .btn.secondary:hover {
+            background: #38a169;
+        }
+
+        .loading {
+            text-align: center;
+            color: #718096;
+            font-style: italic;
+        }
+
+        .timestamp {
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .auto-refresh {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.active {
+            background: #48bb78;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="auto-refresh">
+        <span class="status-indicator active"></span>
+        Auto-refreshing every 5s
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Bot Visit Tracker</h1>
+            <p>Live monitoring of AI bot visits and activity</p>
+        </div>
+
+        <div class="controls">
+            <button class="btn" onclick="refreshData()">🔄 Refresh Now</button>
+            <a href="/api/simulate-bot/googlebot" class="btn secondary" target="_blank">🧪 Simulate GoogleBot</a>
+            <a href="/api/simulate-bot/bingbot" class="btn secondary" target="_blank">🧪 Simulate BingBot</a>
+        </div>
+
+        <div class="dashboard">
+            <div class="card">
+                <h2>📊 Bot Statistics</h2>
+                <div id="stats-container" class="loading">Loading statistics...</div>
+            </div>
+
+            <div class="card">
+                <h2>🕒 Recent Bot Visits</h2>
+                <div id="visits-container" class="loading">Loading recent visits...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                const container = document.getElementById('stats-container');
+                
+                if (stats.length === 0) {
+                    container.innerHTML = '<p class="loading">No bot visits recorded yet. Try simulating some bot visits!</p>';
+                    return;
+                }
+
+                let totalVisits = 0;
+                let totalBots = stats.length;
+                let indexingVisits = 0;
+                let retrievalVisits = 0;
+
+                stats.forEach(stat => {
+                    totalVisits += stat.total_visits;
+                    indexingVisits += stat.indexing_visits;
+                    retrievalVisits += stat.retrieval_visits;
+                });
+
+                const statsHtml = `
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-number">${totalVisits}</div>
+                            <div class="stat-label">Total Visits</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${totalBots}</div>
+                            <div class="stat-label">Unique Bots</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${indexingVisits}</div>
+                            <div class="stat-label">Indexing</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">${retrievalVisits}</div>
+                            <div class="stat-label">Retrieval</div>
+                        </div>
+                    </div>
+                    <div class="visits-list" style="max-height: 200px;">
+                        ${stats.map(stat => `
+                            <div class="visit-item">
+                                <div class="visit-bot">${stat.bot_name}</div>
+                                <div class="visit-details">
+                                    ${stat.total_visits} visits • Last seen: ${new Date(stat.last_visit).toLocaleString()}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                container.innerHTML = statsHtml;
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+                document.getElementById('stats-container').innerHTML = '<p class="loading">Error loading statistics</p>';
+            }
+        }
+
+        async function fetchVisits() {
+            try {
+                const response = await fetch('/api/visits');
+                const visits = await response.json();
+                
+                const container = document.getElementById('visits-container');
+                
+                if (visits.length === 0) {
+                    container.innerHTML = '<p class="loading">No visits recorded yet. Try simulating some bot visits!</p>';
+                    return;
+                }
+
+                const visitsHtml = `
+                    <div class="visits-list">
+                        ${visits.map(visit => `
+                            <div class="visit-item">
+                                <div class="visit-bot">
+                                    ${visit.bot_name || 'Unknown Bot'}
+                                    <span class="classification ${visit.classification}">${visit.classification}</span>
+                                </div>
+                                <div class="visit-details">
+                                    <a href="${visit.page_url}" class="visit-url" target="_blank">${visit.page_url}</a><br>
+                                    IP: ${visit.ip_address} • Method: ${visit.request_method} • Status: ${visit.response_status}<br>
+                                    <span class="timestamp">${new Date(visit.timestamp).toLocaleString()}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                container.innerHTML = visitsHtml;
+            } catch (error) {
+                console.error('Error fetching visits:', error);
+                document.getElementById('visits-container').innerHTML = '<p class="loading">Error loading visits</p>';
+            }
+        }
+
+        async function refreshData() {
+            await Promise.all([fetchStats(), fetchVisits()]);
+        }
+
+        function startAutoRefresh() {
+            refreshInterval = setInterval(refreshData, 5000); // Refresh every 5 seconds
+        }
+
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshData();
+            startAutoRefresh();
+        });
+
+        // Stop auto-refresh when page is not visible
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+    </script>
+</body>
+</html>
