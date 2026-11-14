@@ -1,440 +1,132 @@
 #!/usr/bin/env node
-/**
- * Test Script for Node.js AI Bot Tracker Middleware
- * 
- * This script tests the Node.js Express middleware by simulating
- * various bot requests and validating the logging functionality.
- * 
- * Usage: node tests/test_nodejs_middleware.js
- */
+/** Node.js core + middleware tests. Run: node --test tests/test_nodejs_middleware.js */
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const fs = require('node:fs');
+const { EventEmitter } = require('node:events');
 
-const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const fs = require('fs');
+const BotDetector = require('../core/bot-detector');
+const RequestClassifier = require('../core/classifier');
+const { inRanges } = require('../core/cidr');
+const { Reporter } = require('../core/reporter');
+const { AiBotTracker } = require('../middleware/nodejs');
+const fixtures = require('../signatures/fixtures.json');
 
-// Import the AI Bot Tracker middleware
-const AiBotTracker = require('../middleware/nodejs/ai-bot-tracker');
+const GPT = 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot';
+const CHROME = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
 
-// Test configuration
-const TEST_CONFIG = {
-    port: 3001,
-    database: {
-        type: 'sqlite',
-        path: path.join(__dirname, 'test_nodejs.sqlite')
-    },
-    testDuration: 10000, // 10 seconds
-    requestInterval: 500 // 500ms between requests
-};
+test('detector matches every shared fixture', () => {
+  const d = new BotDetector();
+  for (const c of fixtures.cases) {
+    const r = d.detectBot(c.ua, '203.0.113.9');
+    if (c.expect === null) { assert.equal(r.isBot, false, c.ua); continue; }
+    assert.equal(r.isBot, true, c.ua);
+    assert.equal(r.botId, c.expect.id, c.ua);
+    assert.equal(r.kind, c.expect.kind);
+    assert.equal(r.purpose, c.expect.purpose);
+  }
+});
 
-// Test bot user agents
-const TEST_BOTS = [
-    {
-        name: 'GPTBot Test',
-        userAgent: 'GPTBot/1.0 (+https://openai.com/gptbot)',
-        expectedBot: 'gptbot',
-        expectedClassification: 'retrieval'
-    },
-    {
-        name: 'GoogleBot Test',
-        userAgent: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        expectedBot: 'googlebot',
-        expectedClassification: 'indexing'
-    },
-    {
-        name: 'ClaudeBot Test',
-        userAgent: 'ClaudeBot/1.0 (+https://www.anthropic.com/claudebot)',
-        expectedBot: 'claudebot',
-        expectedClassification: 'retrieval'
-    },
-    {
-        name: 'BingBot Test',
-        userAgent: 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)',
-        expectedBot: 'bingbot',
-        expectedClassification: 'indexing'
-    },
-    {
-        name: 'PerplexityBot Test',
-        userAgent: 'PerplexityBot/1.0 (+https://www.perplexity.ai/bot)',
-        expectedBot: 'perplexitybot',
-        expectedClassification: 'retrieval'
-    },
-    {
-        name: 'FacebookBot Test',
-        userAgent: 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
-        expectedBot: 'facebookbot',
-        expectedClassification: 'social_preview'
-    },
-    {
-        name: 'Regular User Test',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        expectedBot: null,
-        expectedClassification: null
-    }
-];
+test('detector: humans are not bots, falsy UA is safe, generic fallback works', () => {
+  const d = new BotDetector();
+  assert.equal(d.detectBot(CHROME, '1.1.1.1').isBot, false);
+  assert.equal(d.detectBot(undefined, '1.1.1.1').isBot, false);
+  assert.equal(d.detectBot('x'.repeat(100000), '1.1.1.1').isBot, false);
+  const g = d.detectBot('Mozilla/5.0 (compatible; FooBarBot/1.0)', '1.1.1.1');
+  assert.deepEqual([g.isBot, g.botId, g.kind], [true, 'generic-bot', 'other']);
+});
 
-// Test URLs with different classifications
-const TEST_URLS = [
-    { path: '/', expectedClassification: 'indexing' },
-    { path: '/article/ai-trends-2024', expectedClassification: 'retrieval' },
-    { path: '/blog/machine-learning-guide', expectedClassification: 'retrieval' },
-    { path: '/api/v1/posts', expectedClassification: 'api_access' },
-    { path: '/sitemap.xml', expectedClassification: 'indexing' },
-    { path: '/robots.txt', expectedClassification: 'indexing' },
-    { path: '/health', expectedClassification: 'monitoring' },
-    { path: '/feed.rss', expectedClassification: 'feed_consumption' },
-    { path: '/images/logo.png', expectedClassification: 'media_indexing' }
-];
+test('detector verifies IPs against vendor ranges', () => {
+  const d = new BotDetector({ ipRanges: { gptbot: ['20.15.240.64/26'] } });
+  assert.equal(d.detectBot(GPT, '20.15.240.70').verified, 'verified');
+  assert.equal(d.detectBot(GPT, '8.8.8.8').verified, 'unverified');
+  assert.equal(d.detectBot('compatible; ClaudeBot/1.0', '8.8.8.8').verified, 'unknown');
+});
 
-class NodeJSMiddlewareTest {
-    constructor() {
-        this.app = null;
-        this.server = null;
-        this.botTracker = null;
-        this.testResults = {
-            totalRequests: 0,
-            botDetections: 0,
-            classifications: {},
-            errors: [],
-            startTime: null,
-            endTime: null
-        };
-    }
+test('cidr handles v4, v6, mapped v6 and garbage', () => {
+  assert.equal(inRanges('20.15.240.127', ['20.15.240.64/26']), true);
+  assert.equal(inRanges('20.15.240.128', ['20.15.240.64/26']), false);
+  assert.equal(inRanges('2001:4860:4801:10::5', ['2001:4860:4801:10::/64']), true);
+  assert.equal(inRanges('::ffff:20.15.240.70', ['20.15.240.64/26']), true);
+  for (const bad of ['', 'nope', '999.1.1.1', '1.2.3']) assert.equal(inRanges(bad, ['1.2.3.0/24']), false);
+});
 
-    async initialize() {
-        console.log('🚀 Initializing Node.js Middleware Test');
-        console.log('=' * 50);
+test('classifier trusts the declared purpose, falls back to heuristics', () => {
+  const c = new RequestClassifier();
+  const r = c.classifyRequest({ userAgent: 'Claude-User', headers: {}, url: '/a', ipAddress: '1.1.1.1', purpose: 'retrieval', botName: 'Claude-User' });
+  assert.equal(r.classification, 'retrieval');
+  assert.ok(r.confidence >= 0.9);
+  const t = c.classifyRequest({ userAgent: 'GPTBot', headers: {}, url: '/a', ipAddress: '1.1.1.1', purpose: 'training' });
+  assert.equal(t.classification, 'training');
+  const u = c.classifyRequest({ userAgent: 'x', headers: {}, url: '/a', ipAddress: '2.2.2.2', purpose: 'unknown' });
+  assert.ok(['unknown', 'indexing', 'retrieval'].includes(u.classification));
+});
 
-        // Clean up previous test database
-        if (fs.existsSync(TEST_CONFIG.database.path)) {
-            fs.unlinkSync(TEST_CONFIG.database.path);
-            console.log('🗑️  Cleaned up previous test database');
-        }
-
-        // Create Express app
-        this.app = express();
-
-        // Initialize AI Bot Tracker
-        this.botTracker = new AiBotTracker(TEST_CONFIG.database);
-
-        // Add middleware
-        this.app.use(this.botTracker.middleware());
-
-        // Add test routes
-        this.setupRoutes();
-
-        // Start server
-        await this.startServer();
-
-        console.log(`✅ Test server started on port ${TEST_CONFIG.port}`);
-    }
-
-    setupRoutes() {
-        // Home page
-        this.app.get('/', (req, res) => {
-            res.json({ message: 'AI Bot Tracker Test - Home Page', timestamp: new Date().toISOString() });
-        });
-
-        // Article pages
-        this.app.get('/article/:slug', (req, res) => {
-            res.json({ 
-                message: `Article: ${req.params.slug}`, 
-                type: 'article',
-                timestamp: new Date().toISOString() 
-            });
-        });
-
-        // Blog pages
-        this.app.get('/blog/:slug', (req, res) => {
-            res.json({ 
-                message: `Blog Post: ${req.params.slug}`, 
-                type: 'blog',
-                timestamp: new Date().toISOString() 
-            });
-        });
-
-        // API endpoints
-        this.app.get('/api/v1/:resource', (req, res) => {
-            res.json({ 
-                resource: req.params.resource,
-                data: [],
-                timestamp: new Date().toISOString() 
-            });
-        });
-
-        // Sitemap
-        this.app.get('/sitemap.xml', (req, res) => {
-            res.set('Content-Type', 'application/xml');
-            res.send(`<?xml version="1.0" encoding="UTF-8"?>
-                <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-                    <url><loc>http://localhost:${TEST_CONFIG.port}/</loc></url>
-                </urlset>`);
-        });
-
-        // Robots.txt
-        this.app.get('/robots.txt', (req, res) => {
-            res.set('Content-Type', 'text/plain');
-            res.send('User-agent: *\nAllow: /');
-        });
-
-        // Health check
-        this.app.get('/health', (req, res) => {
-            res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-        });
-
-        // RSS feed
-        this.app.get('/feed.rss', (req, res) => {
-            res.set('Content-Type', 'application/rss+xml');
-            res.send(`<?xml version="1.0" encoding="UTF-8"?>
-                <rss version="2.0">
-                    <channel>
-                        <title>Test Feed</title>
-                        <description>Test RSS Feed</description>
-                    </channel>
-                </rss>`);
-        });
-
-        // Images
-        this.app.get('/images/:filename', (req, res) => {
-            res.json({ 
-                message: `Image: ${req.params.filename}`, 
-                type: 'image',
-                timestamp: new Date().toISOString() 
-            });
-        });
-
-        // Statistics endpoint
-        this.app.get('/test/stats', async (req, res) => {
-            try {
-                const stats = await this.botTracker.getStats();
-                const recentVisits = await this.botTracker.getRecentVisits(10);
-                
-                res.json({
-                    stats,
-                    recentVisits,
-                    testResults: this.testResults
-                });
-            } catch (error) {
-                res.status(500).json({ error: error.message });
-            }
-        });
-    }
-
-    async startServer() {
-        return new Promise((resolve) => {
-            this.server = this.app.listen(TEST_CONFIG.port, () => {
-                resolve();
-            });
-        });
-    }
-
-    async runTests() {
-        console.log('\n🧪 Starting Bot Request Tests');
-        console.log('-' * 30);
-
-        this.testResults.startTime = new Date();
-
-        // Run tests for specified duration
-        const testPromises = [];
-
-        // Test each bot with each URL
-        for (const bot of TEST_BOTS) {
-            for (const url of TEST_URLS) {
-                testPromises.push(this.testBotRequest(bot, url));
-                
-                // Add delay between requests
-                await this.delay(TEST_CONFIG.requestInterval);
-            }
-        }
-
-        // Wait for all tests to complete
-        await Promise.all(testPromises);
-
-        this.testResults.endTime = new Date();
-
-        console.log('\n✅ All bot request tests completed');
-    }
-
-    async testBotRequest(bot, urlInfo) {
-        try {
-            const url = `http://localhost:${TEST_CONFIG.port}${urlInfo.path}`;
-            
-            console.log(`🤖 Testing: ${bot.name} -> ${urlInfo.path}`);
-
-            const response = await axios.get(url, {
-                headers: {
-                    'User-Agent': bot.userAgent,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'Connection': 'keep-alive'
-                },
-                timeout: 5000
-            });
-
-            this.testResults.totalRequests++;
-
-            if (bot.expectedBot) {
-                this.testResults.botDetections++;
-                
-                const expectedClassification = bot.expectedClassification || urlInfo.expectedClassification;
-                if (expectedClassification) {
-                    this.testResults.classifications[expectedClassification] = 
-                        (this.testResults.classifications[expectedClassification] || 0) + 1;
-                }
-            }
-
-            console.log(`   ✅ Status: ${response.status} | Bot: ${bot.expectedBot || 'none'} | Classification: ${bot.expectedClassification || urlInfo.expectedClassification || 'none'}`);
-
-        } catch (error) {
-            console.log(`   ❌ Error: ${error.message}`);
-            this.testResults.errors.push({
-                bot: bot.name,
-                url: urlInfo.path,
-                error: error.message
-            });
-        }
-    }
-
-    async validateResults() {
-        console.log('\n📊 Validating Test Results');
-        console.log('-' * 30);
-
-        try {
-            // Get statistics from the bot tracker
-            const stats = await this.botTracker.getStats();
-            const recentVisits = await this.botTracker.getRecentVisits(100);
-
-            console.log(`📈 Database Statistics:`);
-            console.log(`   Total Visits Logged: ${stats.totalVisits || 0}`);
-            console.log(`   Unique Bots: ${stats.uniqueBots || 0}`);
-            console.log(`   Recent Visits Retrieved: ${recentVisits.length}`);
-
-            // Validate bot detection
-            const botVisits = recentVisits.filter(visit => visit.bot_name && visit.bot_name !== 'unknown');
-            console.log(`   Bot Visits Detected: ${botVisits.length}`);
-
-            // Validate classifications
-            const classifications = {};
-            recentVisits.forEach(visit => {
-                if (visit.classification) {
-                    classifications[visit.classification] = (classifications[visit.classification] || 0) + 1;
-                }
-            });
-
-            console.log(`   Classifications:`);
-            Object.entries(classifications).forEach(([classification, count]) => {
-                console.log(`     ${classification}: ${count}`);
-            });
-
-            // Check for expected bots
-            const detectedBots = [...new Set(botVisits.map(visit => visit.bot_name))];
-            console.log(`   Detected Bot Types: ${detectedBots.join(', ')}`);
-
-            // Validation checks
-            const validationResults = {
-                totalRequestsMatch: this.testResults.totalRequests > 0,
-                botsDetected: botVisits.length > 0,
-                classificationsPresent: Object.keys(classifications).length > 0,
-                databaseWorking: stats.totalVisits > 0,
-                noErrors: this.testResults.errors.length === 0
-            };
-
-            console.log(`\n🔍 Validation Results:`);
-            Object.entries(validationResults).forEach(([check, passed]) => {
-                console.log(`   ${passed ? '✅' : '❌'} ${check}: ${passed ? 'PASS' : 'FAIL'}`);
-            });
-
-            const allPassed = Object.values(validationResults).every(result => result);
-            
-            return {
-                success: allPassed,
-                stats,
-                recentVisits,
-                validationResults,
-                testResults: this.testResults
-            };
-
-        } catch (error) {
-            console.log(`❌ Validation Error: ${error.message}`);
-            return {
-                success: false,
-                error: error.message,
-                testResults: this.testResults
-            };
-        }
-    }
-
-    async cleanup() {
-        console.log('\n🧹 Cleaning up test environment');
-
-        if (this.server) {
-            this.server.close();
-            console.log('   ✅ Test server stopped');
-        }
-
-        if (this.botTracker) {
-            await this.botTracker.close();
-            console.log('   ✅ Database connection closed');
-        }
-
-        // Optionally keep test database for inspection
-        // if (fs.existsSync(TEST_CONFIG.database.path)) {
-        //     fs.unlinkSync(TEST_CONFIG.database.path);
-        //     console.log('   ✅ Test database cleaned up');
-        // }
-    }
-
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    async run() {
-        try {
-            await this.initialize();
-            await this.runTests();
-            const results = await this.validateResults();
-            
-            console.log('\n' + '=' * 50);
-            console.log(`🎯 Test Summary:`);
-            console.log(`   Duration: ${(this.testResults.endTime - this.testResults.startTime) / 1000}s`);
-            console.log(`   Total Requests: ${this.testResults.totalRequests}`);
-            console.log(`   Bot Detections: ${this.testResults.botDetections}`);
-            console.log(`   Errors: ${this.testResults.errors.length}`);
-            console.log(`   Overall Result: ${results.success ? '✅ PASS' : '❌ FAIL'}`);
-
-            if (this.testResults.errors.length > 0) {
-                console.log(`\n❌ Errors encountered:`);
-                this.testResults.errors.forEach(error => {
-                    console.log(`   ${error.bot} -> ${error.url}: ${error.error}`);
-                });
-            }
-
-            console.log(`\n📄 Test database saved at: ${TEST_CONFIG.database.path}`);
-            console.log(`   You can inspect the logged data using SQLite tools.`);
-
-            return results;
-
-        } catch (error) {
-            console.error(`💥 Test failed with error: ${error.message}`);
-            console.error(error.stack);
-            return { success: false, error: error.message };
-        } finally {
-            await this.cleanup();
-        }
-    }
+function fakeRes() { const r = new EventEmitter(); r.statusCode = 200; r.headers = {}; r.setHeader = (k, v) => { r.headers[k] = v; }; return r; }
+function fakeReq(ua, extra = {}) {
+  const headers = { 'user-agent': ua, host: 'site.test', cookie: 'secret=1', ...extra };
+  return { ip: '203.0.113.7', protocol: 'https', originalUrl: '/blog/post?token=abc', method: 'GET', headers,
+    get: (n) => headers[n.toLowerCase()], connection: {}, socket: {} };
 }
+const tmpDb = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'abt-')), 'v.db');
+const run = async (mw, req, res) => { let called = false; await mw(req, res, () => { called = true; }); return called; };
+const settle = (ms = 80) => new Promise((r) => setTimeout(r, ms));
 
-// Run tests if this script is executed directly
-if (require.main === module) {
-    const test = new NodeJSMiddlewareTest();
-    
-    test.run().then(results => {
-        process.exit(results.success ? 0 : 1);
-    }).catch(error => {
-        console.error('Test execution failed:', error);
-        process.exit(1);
-    });
-}
+test('middleware logs bot visits (sanitised, with status) and ignores humans', async () => {
+  const t = new AiBotTracker({ database: { type: 'sqlite', path: tmpDb() }, enableLogging: false, asyncLogging: false });
+  const mw = t.middleware();
+  const res = fakeRes(); res.statusCode = 404;
+  const req = fakeReq(GPT);
+  assert.equal(await run(mw, req, res), true);
+  assert.equal(req.botInfo.botId, 'gptbot');
+  res.emit('finish');
+  await settle();
+  const human = fakeRes();
+  assert.equal(await run(mw, fakeReq(CHROME), human), true);
+  human.emit('finish');
+  await settle();
+  const rows = await t.getRecentVisits(10);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].bot_name, 'GPTBot');
+  assert.equal(rows[0].classification, 'training');
+  assert.equal(rows[0].response_status, 404);
+  assert.ok(!/secret/.test(rows[0].headers), 'cookie header must not be stored');
+  assert.equal(rows[0].page_url, 'https://site.test/blog/post', 'query string must not be stored');
+  const stats = await t.getStats();
+  assert.equal(stats[0].bot_name, 'GPTBot');
+  assert.equal(stats[0].total_visits, 1);
+  await t.close();
+});
 
-module.exports = NodeJSMiddlewareTest;
+test('middleware never blocks or fails the request when reporting fails', async () => {
+  const t = new AiBotTracker({ database: false, enableLogging: false, report: { endpoint: 'http://127.0.0.1:1', key: 'k', site: 's.test', timeoutMs: 300 } });
+  const res = fakeRes();
+  assert.equal(await run(t.middleware(), fakeReq(GPT), res), true);
+  res.emit('finish');
+  await settle(400);
+  await t.close();
+});
+
+test('reporter posts a batch with bearer auth and the tracker event shape', async () => {
+  let got;
+  const server = http.createServer((req, res) => {
+    let body = ''; req.on('data', (c) => (body += c));
+    req.on('end', () => { got = { auth: req.headers.authorization, url: req.url, body: JSON.parse(body) }; res.end('{"stored":1}'); });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const rep = new Reporter({ endpoint: `http://127.0.0.1:${server.address().port}`, key: 'abc', site: 'Example.com', flushMs: 0 });
+  await rep.send([{ ip: '1.2.3.4', ua: GPT, path: '/x?y=1', method: 'GET', status: 200 }]);
+  server.close();
+  assert.equal(got.url, '/api/ingest');
+  assert.equal(got.auth, 'Bearer abc');
+  assert.deepEqual(Object.keys(got.body.events[0]).sort(), ['ip', 'method', 'path', 'site', 'status', 'ua']);
+  assert.equal(got.body.events[0].site, 'Example.com');
+});
+
+test('reporter.send resolves false (never throws) on network failure', async () => {
+  const rep = new Reporter({ endpoint: 'http://127.0.0.1:1', key: 'k', site: 's', timeoutMs: 300, flushMs: 0 });
+  assert.equal(await rep.send([{ ua: GPT, path: '/' }]), false);
+});

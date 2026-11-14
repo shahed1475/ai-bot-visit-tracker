@@ -63,8 +63,10 @@ class AiBotTracker
             // Bot detection configuration
             'bot_detection' => [
                 'custom_patterns' => [],
-                'custom_ip_ranges' => [],
-                'detection_methods' => ['user_agent', 'ip_range']
+                'ip_ranges' => [],          // bot id => CIDR list, enables verified/unverified
+                'registry_path' => null,    // default: ../../../signatures/ai-bots.json or env AI_BOT_REGISTRY
+                'trust_proxy_headers' => false,      // true: believe X-Forwarded-For & co (only behind your own proxy)
+                'trust_cloudflare_headers' => false  // true: believe CF-Connecting-IP (only behind Cloudflare)
             ],
             
             // Classification configuration
@@ -112,7 +114,8 @@ class AiBotTracker
         // Initialize bot detector
         $this->botDetector = new BotDetector(
             $this->config['bot_detection']['custom_patterns'] ?? [],
-            $this->config['bot_detection']['custom_ip_ranges'] ?? []
+            $this->config['bot_detection']['ip_ranges'] ?? [],
+            $this->config['bot_detection']['registry_path'] ?? null
         );
 
         // Initialize request classifier
@@ -152,22 +155,21 @@ class AiBotTracker
             $requestData['ip_address'] ?? ''
         );
 
-        if (!$botInfo) {
+        if (empty($botInfo['is_bot'])) {
             return null;
         }
 
-        // Classify request
-        $classification = $this->requestClassifier->classifyRequest(
-            $requestData['url'] ?? '',
-            $requestData['headers'] ?? [],
-            $requestData['user_agent'] ?? '',
-            $requestData['referer'] ?? '',
-            $requestData['method'] ?? 'GET'
-        );
+        // Vendors declare why they crawl in the user agent; trust that over heuristics.
+        if (in_array($botInfo['purpose'], ['training', 'indexing', 'retrieval'], true)) {
+            $classification = ['type' => $botInfo['purpose'], 'confidence' => 0.95,
+                'reasons' => ['Declared purpose of ' . $botInfo['bot_name']]];
+        } else {
+            $classification = $this->requestClassifier->classifyRequest(array_merge($requestData, ['bot_name' => $botInfo['bot_name']]));
+        }
 
         // Prepare visit data
         $visitData = array_merge($requestData, [
-            'bot_name' => $botInfo['name'],
+            'bot_name' => $botInfo['bot_name'],
             'classification' => $classification['type'],
             'confidence' => $classification['confidence'],
             'detection_method' => $botInfo['detection_method'],
@@ -224,6 +226,17 @@ class AiBotTracker
             'HTTP_FORWARDED',            // Proxy
             'REMOTE_ADDR'                // Standard
         ];
+
+        // Forwarded headers are client-controlled unless they come from your own proxy: trust only when configured.
+        $trust = $this->config['bot_detection'];
+        if (!empty($trust['trust_proxy_headers'])) {
+            $trusted = $headers;
+        } elseif (!empty($trust['trust_cloudflare_headers'])) {
+            $trusted = ['HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR'];
+        } else {
+            $trusted = ['REMOTE_ADDR'];
+        }
+        $headers = $trusted;
 
         foreach ($headers as $header) {
             if (!empty($_SERVER[$header])) {
@@ -284,7 +297,7 @@ class AiBotTracker
     public function logVisit(array $visitData): int
     {
         // Add response time if enabled
-        if ($this->config['logging']['log_response_time']) {
+        if (($this->config['logging']['log_response_time'] ?? true)) {
             $visitData['response_time'] = microtime(true) - $this->requestStartTime;
         }
 

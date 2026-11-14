@@ -84,6 +84,16 @@ class RequestClassifier {
             timestamp = new Date()
         } = requestData;
 
+        // Vendors declare why they crawl in the user agent; trust that over heuristics.
+        if (['training', 'indexing', 'retrieval'].includes(requestData.purpose)) {
+            return {
+                classification: requestData.purpose,
+                confidence: 0.95,
+                reasons: [`Declared purpose of ${requestData.botName || 'this bot'}`],
+                scores: { indexing: 0, retrieval: 0 }
+            };
+        }
+
         // Track request for frequency analysis
         this.trackRequest(ipAddress, userAgent, timestamp);
 
@@ -205,8 +215,9 @@ class RequestClassifier {
 
         // Check for query parameters that suggest user-driven requests
         if (url) {
-            const urlObj = new URL(url, 'http://example.com');
-            for (const param of this.retrievalIndicators.queryParams) {
+            let urlObj = null;
+            try { urlObj = new URL(url, 'http://example.com'); } catch { /* malformed URL */ }
+            for (const param of urlObj ? this.retrievalIndicators.queryParams : []) {
                 if (urlObj.searchParams.has(param)) {
                     score += 0.3;
                     break;
@@ -361,9 +372,10 @@ class RequestClassifier {
      * Start cleanup interval for request history
      */
     startCleanupInterval() {
-        setInterval(() => {
+        this.cleanupTimer = setInterval(() => {
             this.cleanupOldEntries();
         }, this.cleanupInterval);
+        this.cleanupTimer.unref(); // never keep the process alive
     }
 
     /**

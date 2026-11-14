@@ -1,8 +1,7 @@
 /**
- * Database Connection and Management System
- * Supports SQLite (default) and PostgreSQL
+ * Local SQLite storage for the Node middleware.
+ * (Central, multi-site storage lives in the Cloudflare tracker: see cloudflare/README.md.)
  */
-
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
@@ -11,335 +10,100 @@ class Database {
     constructor(config = {}) {
         this.config = {
             type: config.type || 'sqlite',
-            sqlite: {
-                path: config.sqlitePath || path.join(__dirname, '..', 'data', 'bot_visits.db'),
-                ...config.sqlite
-            },
-            postgresql: {
-                host: config.host || 'localhost',
-                port: config.port || 5432,
-                database: config.database || 'bot_tracker',
-                user: config.user || 'postgres',
-                password: config.password || '',
-                ...config.postgresql
-            }
+            path: config.path || config.sqlitePath || path.join(process.cwd(), 'data', 'bot_visits.db')
         };
-        
         this.db = null;
         this.isConnected = false;
     }
 
-    /**
-     * Initialize database connection
-     */
     async connect() {
-        try {
-            if (this.config.type === 'sqlite') {
-                await this.connectSQLite();
-            } else if (this.config.type === 'postgresql') {
-                await this.connectPostgreSQL();
-            } else {
-                throw new Error(`Unsupported database type: ${this.config.type}`);
-            }
-            
-            await this.initializeSchema();
-            this.isConnected = true;
-            console.log(`Connected to ${this.config.type} database successfully`);
-        } catch (error) {
-            console.error('Database connection failed:', error);
-            throw error;
+        if (this.config.type !== 'sqlite') {
+            throw new Error(`Unsupported database type "${this.config.type}". The Node middleware stores locally in SQLite; ` +
+                'to centralise data use the report option with the Cloudflare tracker.');
         }
-    }
-
-    /**
-     * Connect to SQLite database
-     */
-    async connectSQLite() {
-        return new Promise((resolve, reject) => {
-            // Ensure data directory exists
-            const dataDir = path.dirname(this.config.sqlite.path);
-            if (!fs.existsSync(dataDir)) {
-                fs.mkdirSync(dataDir, { recursive: true });
-            }
-
-            this.db = new sqlite3.Database(this.config.sqlite.path, (err) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    // Enable foreign keys and WAL mode for better performance
-                    this.db.run('PRAGMA foreign_keys = ON');
-                    this.db.run('PRAGMA journal_mode = WAL');
-                    resolve();
-                }
-            });
+        fs.mkdirSync(path.dirname(this.config.path), { recursive: true });
+        await new Promise((resolve, reject) => {
+            this.db = new sqlite3.Database(this.config.path, (err) => (err ? reject(err) : resolve()));
         });
+        await this.exec('PRAGMA journal_mode = WAL;');
+        await this.exec(fs.readFileSync(path.join(__dirname, '..', 'database', 'schema.sql'), 'utf8'));
+        this.isConnected = true;
     }
 
-    /**
-     * Connect to PostgreSQL database
-     */
-    async connectPostgreSQL() {
-        // This would require pg module
-        // const { Client } = require('pg');
-        // Implementation for PostgreSQL connection
-        throw new Error('PostgreSQL support not implemented yet. Use SQLite for now.');
+    exec(sql) { return new Promise((res, rej) => this.db.exec(sql, (e) => (e ? rej(e) : res()))); }
+    run(sql, params = []) {
+        return new Promise((res, rej) => this.db.run(sql, params, function (e) { return e ? rej(e) : res({ lastID: this.lastID, changes: this.changes }); }));
     }
+    all(sql, params = []) { return new Promise((res, rej) => this.db.all(sql, params, (e, rows) => (e ? rej(e) : res(rows)))); }
+    get(sql, params = []) { return new Promise((res, rej) => this.db.get(sql, params, (e, row) => (e ? rej(e) : res(row)))); }
 
-    /**
-     * Initialize database schema
-     */
-    async initializeSchema() {
-        const schemaPath = path.join(__dirname, '..', 'database', 'schema.sql');
-        const schema = fs.readFileSync(schemaPath, 'utf8');
-        
-        // Split schema into individual statements and filter out empty ones
-        const statements = schema
-            .split(';')
-            .map(stmt => stmt.trim())
-            .filter(stmt => stmt.length > 0 && !stmt.startsWith('--'));
-        
-        for (const statement of statements) {
-            try {
-                await this.run(statement + ';');
-            } catch (error) {
-                // Log but don't fail on view creation errors (they might already exist)
-                if (!error.message.includes('already exists')) {
-                    console.warn('Schema statement failed:', statement.substring(0, 50) + '...', error.message);
-                }
-            }
-        }
-    }
-
-    /**
-     * Execute a SQL query
-     */
-    async run(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.run(sql, params, function(err) {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve({ lastID: this.lastID, changes: this.changes });
-                }
-            });
-        });
-    }
-
-    /**
-     * Execute a SELECT query and return all results
-     */
-    async all(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.all(sql, params, (err, rows) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(rows);
-                }
-            });
-        });
-    }
-
-    /**
-     * Execute a SELECT query and return first result
-     */
-    async get(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            this.db.get(sql, params, (err, row) => {
-                if (err) {
-                    reject(err);
-                } else {
-                    resolve(row);
-                }
-            });
-        });
-    }
-
-    /**
-     * Log a bot visit to the database
-     */
-    async logVisit(visitData) {
-        const {
-            ipAddress,
-            botName,
-            pageUrl,
-            headers,
-            classification = 'unknown',
-            userAgent,
-            referer,
-            requestMethod = 'GET',
-            responseStatus,
-            processingTimeMs
-        } = visitData;
-
-        const sql = `
-            INSERT INTO visits (
-                ip_address, bot_name, page_url, headers, classification,
-                user_agent, referer, request_method, response_status, processing_time_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        const params = [
-            ipAddress,
-            botName,
-            pageUrl,
-            JSON.stringify(headers),
-            classification,
-            userAgent,
-            referer,
-            requestMethod,
-            responseStatus,
-            processingTimeMs
-        ];
-
+    async logVisit(v) {
         try {
-            const result = await this.run(sql, params);
-            return { success: true, visitId: result.lastID };
+            const r = await this.run(
+                `INSERT INTO visits (ip_address, bot_id, bot_name, bot_kind, page_url, headers, classification, verified,
+                    user_agent, referer, request_method, response_status, processing_time_ms)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+                [v.ipAddress, v.botId || null, v.botName || null, v.botKind || null, v.pageUrl,
+                    typeof v.headers === 'string' ? v.headers : JSON.stringify(v.headers || {}),
+                    v.classification || 'unknown', v.verified || 'unknown', v.userAgent, v.referer,
+                    v.requestMethod || 'GET', v.responseStatus ?? null, v.processingTimeMs ?? null]);
+            return { success: true, visitId: r.lastID };
         } catch (error) {
-            console.error('Failed to log visit:', error);
             return { success: false, error: error.message };
         }
     }
 
-    /**
-     * Get bot statistics
-     */
+    /** Per-bot totals, computed from the visits table. */
     async getBotStats(botName = null) {
-        let sql = 'SELECT * FROM bot_stats';
-        let params = [];
+        return this.all(
+            `SELECT bot_name, COUNT(*) AS total_visits,
+                SUM(classification = 'training') AS training_visits,
+                SUM(classification = 'indexing') AS indexing_visits,
+                SUM(classification = 'retrieval') AS retrieval_visits,
+                MIN(timestamp) AS first_visit, MAX(timestamp) AS last_visit
+             FROM visits WHERE bot_name IS NOT NULL ${botName ? 'AND bot_name = ?' : ''}
+             GROUP BY bot_name ORDER BY total_visits DESC`, botName ? [botName] : []);
+    }
+    getStats(...a) { return this.getBotStats(...a); }
 
-        if (botName) {
-            sql += ' WHERE bot_name = ?';
-            params = [botName];
-        }
-
-        sql += ' ORDER BY total_visits DESC';
-
-        return await this.all(sql, params);
+    getRecentVisits(limit = 100, offset = 0) {
+        return this.all('SELECT * FROM visits ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?', [Math.max(1, Math.min(+limit || 100, 1000)), Math.max(0, +offset || 0)]);
     }
 
-    /**
-     * Get recent visits
-     */
-    async getRecentVisits(limit = 100, offset = 0) {
-        const sql = `
-            SELECT * FROM visits 
-            ORDER BY timestamp DESC 
-            LIMIT ? OFFSET ?
-        `;
-        return await this.all(sql, [limit, offset]);
+    getVisitsByClassification(classification, limit = 100) {
+        return this.all('SELECT * FROM visits WHERE classification = ? ORDER BY timestamp DESC LIMIT ?', [classification, limit]);
     }
 
-    /**
-     * Get visits by classification
-     */
-    async getVisitsByClassification(classification, limit = 100) {
-        const sql = `
-            SELECT * FROM visits 
-            WHERE classification = ? 
-            ORDER BY timestamp DESC 
-            LIMIT ?
-        `;
-        return await this.all(sql, [classification, limit]);
+    getVisitStats(startDate, endDate) {
+        return this.all(
+            `SELECT bot_name, classification, COUNT(*) AS count, COUNT(DISTINCT ip_address) AS unique_ips, COUNT(DISTINCT page_url) AS unique_pages
+             FROM visits WHERE timestamp BETWEEN ? AND ? GROUP BY bot_name, classification ORDER BY count DESC`, [startDate, endDate]);
     }
 
-    /**
-     * Get visit statistics for a date range
-     */
-    async getVisitStats(startDate, endDate) {
-        const sql = `
-            SELECT 
-                bot_name,
-                classification,
-                COUNT(*) as count,
-                COUNT(DISTINCT ip_address) as unique_ips,
-                COUNT(DISTINCT page_url) as unique_pages
-            FROM visits 
-            WHERE timestamp BETWEEN ? AND ?
-            GROUP BY bot_name, classification
-            ORDER BY count DESC
-        `;
-        return await this.all(sql, [startDate, endDate]);
-    }
-
-    /**
-     * Export visits to JSON
-     */
     async exportToJSON(filters = {}) {
-        let sql = 'SELECT * FROM visits WHERE 1=1';
-        let params = [];
-
-        if (filters.botName) {
-            sql += ' AND bot_name = ?';
-            params.push(filters.botName);
-        }
-
-        if (filters.classification) {
-            sql += ' AND classification = ?';
-            params.push(filters.classification);
-        }
-
-        if (filters.startDate) {
-            sql += ' AND timestamp >= ?';
-            params.push(filters.startDate);
-        }
-
-        if (filters.endDate) {
-            sql += ' AND timestamp <= ?';
-            params.push(filters.endDate);
-        }
-
-        sql += ' ORDER BY timestamp DESC';
-
-        if (filters.limit) {
-            sql += ' LIMIT ?';
-            params.push(filters.limit);
-        }
-
-        const visits = await this.all(sql, params);
-        return visits.map(visit => ({
-            ...visit,
-            headers: JSON.parse(visit.headers || '{}')
-        }));
+        const where = ['1=1'], params = [];
+        if (filters.botName) { where.push('bot_name = ?'); params.push(filters.botName); }
+        if (filters.classification) { where.push('classification = ?'); params.push(filters.classification); }
+        if (filters.startDate) { where.push('timestamp >= ?'); params.push(filters.startDate); }
+        if (filters.endDate) { where.push('timestamp <= ?'); params.push(filters.endDate); }
+        params.push(Math.min(+filters.limit || 10000, 100000));
+        const rows = await this.all(`SELECT * FROM visits WHERE ${where.join(' AND ')} ORDER BY timestamp DESC LIMIT ?`, params);
+        return rows.map((r) => ({ ...r, headers: JSON.parse(r.headers || '{}') }));
     }
 
-    /**
-     * Clean up old visits based on retention policy
-     */
-    async cleanupOldVisits(retentionDays = 365) {
-        const sql = `
-            DELETE FROM visits 
-            WHERE timestamp < datetime('now', '-${retentionDays} days')
-        `;
-        const result = await this.run(sql);
-        return result.changes;
+    async cleanupOldVisits(retentionDays = 90) {
+        const days = Math.max(1, Math.floor(Number(retentionDays) || 90));
+        return (await this.run('DELETE FROM visits WHERE timestamp < datetime(\'now\', ?)', [`-${days} days`])).changes;
     }
 
-    /**
-     * Close database connection
-     */
-    async close() {
+    close() {
         return new Promise((resolve) => {
-            if (this.db) {
-                this.db.close((err) => {
-                    if (err) {
-                        console.error('Error closing database:', err);
-                    }
-                    this.isConnected = false;
-                    resolve();
-                });
-            } else {
-                resolve();
-            }
+            if (!this.db) return resolve();
+            this.db.close(() => { this.isConnected = false; resolve(); });
         });
     }
 
-    /**
-     * Check if database is connected
-     */
-    isReady() {
-        return this.isConnected;
-    }
+    isReady() { return this.isConnected; }
 }
 
 module.exports = Database;

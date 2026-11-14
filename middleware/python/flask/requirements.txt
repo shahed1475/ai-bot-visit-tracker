@@ -1,12 +1,3 @@
-Flask>=2.0.0
-sqlite3
-psycopg2-binary>=2.9.0
-python-dotenv>=0.19.0
-user-agents>=2.2.0
-ipaddress
-csv
-json
-datetime
-re
-os
-sys
+Flask>=2.0
+# optional, only for PostgreSQL storage:
+# psycopg2-binary>=2.9

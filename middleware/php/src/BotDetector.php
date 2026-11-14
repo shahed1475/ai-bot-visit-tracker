@@ -3,276 +3,141 @@
 namespace AiBotTracker;
 
 /**
- * BotDetector - Detects AI bots based on user-agent patterns and IP ranges
+ * BotDetector: identifies AI bots from the shared registry (signatures/ai-bots.json).
+ *
+ * Matching contract (identical in every language): the first registry entry whose case-insensitive
+ * `ua` regex matches wins; unknown crawlers fall back to "generic-bot". IP ranges are used only to
+ * VERIFY a claimed bot, never to detect one (cloud IPs are shared with ordinary customers).
  */
 class BotDetector
 {
-    /**
-     * @var array Default bot patterns
-     */
-    private $botPatterns = [
-        'GPTBot' => [
-            '/GPTBot\/[\d\.]+/',
-            '/OpenAI-GPT/',
-            '/ChatGPT-User/'
-        ],
-        'ClaudeBot' => [
-            '/ClaudeBot\/[\d\.]+/',
-            '/Claude-Web/',
-            '/anthropic-ai/',
-            '/Anthropic/'
-        ],
-        'PerplexityBot' => [
-            '/PerplexityBot\/[\d\.]+/',
-            '/Perplexity/',
-            '/PerplexityBot/'
-        ],
-        'Google-Extended' => [
-            '/Google-Extended/',
-            '/GoogleOther/',
-            '/Bard/'
-        ],
-        'CCBot' => [
-            '/CCBot\/[\d\.]+/',
-            '/CommonCrawl/'
-        ],
-        'Bytespider' => [
-            '/Bytespider/',
-            '/ByteDance/'
-        ],
-        'Applebot-Extended' => [
-            '/Applebot-Extended/',
-            '/Applebot\/[\d\.]+/'
-        ],
-        'Meta-ExternalAgent' => [
-            '/Meta-ExternalAgent/',
-            '/facebookexternalhit/'
-        ]
-    ];
+    private const MAX_UA = 512;
+    private const GENERIC = '/[a-z]bot\b|\bbot\b|\b(crawler|spider|scraper|fetcher|indexer)\b/i';
+
+    /** @var array<int,array> */
+    private $entries = [];
+
+    /** @var array<int,array> custom bots, checked before the registry */
+    private $custom = [];
+
+    /** @var array<string,string[]> bot id => CIDR list (vendor-published ranges) */
+    private $ipRanges;
 
     /**
-     * @var array IP ranges for known AI services
+     * @param array       $customPatterns name => list of PCRE patterns (e.g. ['MyBot' => ['/MyBot\/\d+/']])
+     * @param array       $ipRanges       bot id => CIDR list, enables verified/unverified results
+     * @param string|null $registryPath   path to ai-bots.json (default: repo copy, or env AI_BOT_REGISTRY)
      */
-    private $ipRanges = [
-        '66.249.64.0/19',    // Google
-        '40.77.167.0/24',    // Microsoft/OpenAI
-        '52.167.144.0/20',   // Azure/OpenAI
-        '13.107.42.14/32',   // Microsoft
-    ];
-
-    /**
-     * @var array Custom bot patterns
-     */
-    private $customPatterns = [];
-
-    /**
-     * Constructor
-     * 
-     * @param array $customPatterns Custom bot patterns
-     * @param array $customIpRanges Custom IP ranges
-     */
-    public function __construct(array $customPatterns = [], array $customIpRanges = [])
+    public function __construct(array $customPatterns = [], array $ipRanges = [], ?string $registryPath = null)
     {
-        $this->customPatterns = $customPatterns;
-        $this->ipRanges = array_merge($this->ipRanges, $customIpRanges);
+        $path = $registryPath ?? (getenv('AI_BOT_REGISTRY') ?: __DIR__ . '/../../../signatures/ai-bots.json');
+        $json = is_readable($path) ? json_decode((string) file_get_contents($path), true) : null;
+        if (!is_array($json) || empty($json['bots'])) {
+            throw new \RuntimeException("Bot registry not found at $path (set AI_BOT_REGISTRY or pass \$registryPath)");
+        }
+        foreach ($json['bots'] as $bot) {
+            $bot['re'] = '#' . str_replace('#', '\#', $bot['ua']) . '#i';
+            $this->entries[] = $bot;
+        }
+        $this->ipRanges = $ipRanges;
+        foreach ($customPatterns as $name => $patterns) {
+            $this->addBotPattern((string) $name, (array) $patterns);
+        }
+    }
+
+    public function addBotPattern(string $botName, array $patterns): void
+    {
+        $this->custom[] = [
+            'id' => strtolower(preg_replace('/[^a-z0-9]+/i', '-', $botName)), 'name' => $botName, 'operator' => 'Custom',
+            'kind' => 'ai', 'purpose' => 'unknown', 'ipSources' => [], 'patterns' => $patterns,
+        ];
+    }
+
+    public function setIpRanges(array $ranges): void
+    {
+        $this->ipRanges = $ranges;
+    }
+
+    public function getIpRanges(): array
+    {
+        return $this->ipRanges;
     }
 
     /**
-     * Detect if the request is from an AI bot
-     * 
-     * @param string $userAgent User agent string
-     * @param string $ipAddress IP address
-     * @return array Bot detection result
+     * @return array{is_bot:bool,bot_id:?string,bot_name:?string,operator:?string,kind:?string,purpose:?string,verified:string,confidence:float,detection_method:?string}
      */
     public function detectBot(string $userAgent, string $ipAddress): array
     {
-        $result = [
-            'is_bot' => false,
-            'bot_name' => null,
-            'confidence' => 0.0,
-            'detection_method' => null
-        ];
-
-        // Check user agent patterns
-        $botName = $this->checkUserAgent($userAgent);
-        if ($botName) {
-            $result['is_bot'] = true;
-            $result['bot_name'] = $botName;
-            $result['confidence'] = 0.9;
-            $result['detection_method'] = 'user_agent';
-            return $result;
+        $none = ['is_bot' => false, 'bot_id' => null, 'bot_name' => null, 'operator' => null, 'kind' => null,
+            'purpose' => null, 'verified' => 'unknown', 'confidence' => 0.0, 'detection_method' => null];
+        if ($userAgent === '') {
+            return $none;
         }
+        $ua = substr($userAgent, 0, self::MAX_UA);
 
-        // Check IP ranges
-        if ($this->checkIpRange($ipAddress)) {
-            $result['is_bot'] = true;
-            $result['bot_name'] = 'Unknown-AI-Bot';
-            $result['confidence'] = 0.7;
-            $result['detection_method'] = 'ip_range';
-            return $result;
-        }
-
-        return $result;
-    }
-
-    /**
-     * Check user agent against bot patterns
-     * 
-     * @param string $userAgent User agent string
-     * @return string|null Bot name if detected
-     */
-    private function checkUserAgent(string $userAgent): ?string
-    {
-        // Check default patterns
-        foreach ($this->botPatterns as $botName => $patterns) {
-            foreach ($patterns as $pattern) {
-                if (preg_match($pattern, $userAgent)) {
-                    return $botName;
+        foreach ($this->custom as $bot) {
+            foreach ($bot['patterns'] as $pattern) {
+                if (@preg_match($pattern, $ua)) {
+                    return $this->result($bot, $ipAddress, 0.95, 'user_agent');
                 }
             }
         }
-
-        // Check custom patterns
-        foreach ($this->customPatterns as $botName => $patterns) {
-            foreach ($patterns as $pattern) {
-                if (preg_match($pattern, $userAgent)) {
-                    return $botName;
-                }
+        foreach ($this->entries as $bot) {
+            if (preg_match($bot['re'], $ua)) {
+                return $this->result($bot, $ipAddress, 0.95, 'user_agent');
             }
         }
-
-        return null;
+        if (preg_match(self::GENERIC, $ua)) {
+            $generic = ['id' => 'generic-bot', 'name' => 'Other crawler', 'operator' => 'Unknown', 'kind' => 'other',
+                'purpose' => 'unknown', 'ipSources' => []];
+            return $this->result($generic, $ipAddress, 0.5, 'generic_pattern');
+        }
+        return $none;
     }
 
-    /**
-     * Check if IP address is in known AI service ranges
-     * 
-     * @param string $ipAddress IP address to check
-     * @return bool True if IP is in known range
-     */
-    private function checkIpRange(string $ipAddress): bool
+    private function result(array $bot, string $ip, float $confidence, string $method): array
     {
-        foreach ($this->ipRanges as $range) {
-            if ($this->ipInRange($ipAddress, $range)) {
+        $ranges = $this->ipRanges[$bot['id']] ?? [];
+        $verified = ($ip === '' || empty($bot['ipSources']) || !$ranges)
+            ? 'unknown' : (self::inRanges($ip, $ranges) ? 'verified' : 'unverified');
+        return ['is_bot' => true, 'bot_id' => $bot['id'], 'bot_name' => $bot['name'], 'operator' => $bot['operator'],
+            'kind' => $bot['kind'], 'purpose' => $bot['purpose'], 'verified' => $verified,
+            'confidence' => $confidence, 'detection_method' => $method];
+    }
+
+    /** True when $ip is inside any CIDR. IPv4, IPv6 and IPv4-mapped IPv6; garbage input is false. */
+    public static function inRanges(string $ip, array $cidrs): bool
+    {
+        $bin = @inet_pton(trim($ip));
+        if ($bin === false) {
+            return false;
+        }
+        if (strlen($bin) === 16 && substr($bin, 0, 12) === "\0\0\0\0\0\0\0\0\0\0\xff\xff") {
+            $bin = substr($bin, 12);
+        }
+        foreach ($cidrs as $cidr) {
+            $parts = explode('/', (string) $cidr);
+            if (count($parts) !== 2 || !ctype_digit($parts[1])) {
+                continue;
+            }
+            $net = @inet_pton($parts[0]);
+            $bits = (int) $parts[1];
+            if ($net === false || strlen($net) !== strlen($bin) || $bits > strlen($net) * 8) {
+                continue;
+            }
+            $bytes = intdiv($bits, 8);
+            $rem = $bits % 8;
+            if ($bytes > 0 && substr($bin, 0, $bytes) !== substr($net, 0, $bytes)) {
+                continue;
+            }
+            if ($rem === 0) {
+                return true;
+            }
+            $mask = (0xFF << (8 - $rem)) & 0xFF;
+            if ((ord($bin[$bytes]) & $mask) === (ord($net[$bytes]) & $mask)) {
                 return true;
             }
         }
         return false;
-    }
-
-    /**
-     * Check if IP address is within a CIDR range
-     * 
-     * @param string $ip IP address
-     * @param string $range CIDR range
-     * @return bool True if IP is in range
-     */
-    private function ipInRange(string $ip, string $range): bool
-    {
-        if (strpos($range, '/') === false) {
-            return $ip === $range;
-        }
-
-        list($subnet, $bits) = explode('/', $range);
-        
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return $this->ipv4InRange($ip, $subnet, (int)$bits);
-        } elseif (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-            return $this->ipv6InRange($ip, $subnet, (int)$bits);
-        }
-
-        return false;
-    }
-
-    /**
-     * Check if IPv4 address is in range
-     * 
-     * @param string $ip IPv4 address
-     * @param string $subnet Subnet
-     * @param int $bits Subnet bits
-     * @return bool True if in range
-     */
-    private function ipv4InRange(string $ip, string $subnet, int $bits): bool
-    {
-        $ip = ip2long($ip);
-        $subnet = ip2long($subnet);
-        $mask = -1 << (32 - $bits);
-        
-        return ($ip & $mask) === ($subnet & $mask);
-    }
-
-    /**
-     * Check if IPv6 address is in range
-     * 
-     * @param string $ip IPv6 address
-     * @param string $subnet Subnet
-     * @param int $bits Subnet bits
-     * @return bool True if in range
-     */
-    private function ipv6InRange(string $ip, string $subnet, int $bits): bool
-    {
-        $ip = inet_pton($ip);
-        $subnet = inet_pton($subnet);
-        
-        if ($ip === false || $subnet === false) {
-            return false;
-        }
-
-        $bytesToCheck = intval($bits / 8);
-        $bitsToCheck = $bits % 8;
-
-        for ($i = 0; $i < $bytesToCheck; $i++) {
-            if ($ip[$i] !== $subnet[$i]) {
-                return false;
-            }
-        }
-
-        if ($bitsToCheck > 0) {
-            $mask = 0xFF << (8 - $bitsToCheck);
-            return (ord($ip[$bytesToCheck]) & $mask) === (ord($subnet[$bytesToCheck]) & $mask);
-        }
-
-        return true;
-    }
-
-    /**
-     * Add custom bot pattern
-     * 
-     * @param string $botName Bot name
-     * @param array $patterns Array of regex patterns
-     */
-    public function addBotPattern(string $botName, array $patterns): void
-    {
-        $this->customPatterns[$botName] = $patterns;
-    }
-
-    /**
-     * Add IP range
-     * 
-     * @param string $range CIDR range
-     */
-    public function addIpRange(string $range): void
-    {
-        $this->ipRanges[] = $range;
-    }
-
-    /**
-     * Get all bot patterns
-     * 
-     * @return array All bot patterns
-     */
-    public function getBotPatterns(): array
-    {
-        return array_merge($this->botPatterns, $this->customPatterns);
-    }
-
-    /**
-     * Get all IP ranges
-     * 
-     * @return array All IP ranges
-     */
-    public function getIpRanges(): array
-    {
-        return $this->ipRanges;
     }
 }

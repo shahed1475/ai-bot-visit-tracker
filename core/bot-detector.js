@@ -1,208 +1,74 @@
 /**
- * AI Bot Detection System
- * Identifies AI bots based on user-agent patterns and IP ranges
+ * AI bot detection driven by the shared registry (signatures/ai-bots.json).
+ * Matching contract (identical in every language): first registry entry whose
+ * case-insensitive `ua` regex matches wins; unknown crawlers fall back to "generic-bot".
  */
+const registry = require('../signatures/ai-bots.json');
+const { inRanges } = require('./cidr');
+
+const MAX_UA = 512;
+const GENERIC = /[a-z]bot\b|\bbot\b|\b(crawler|spider|scraper|fetcher|indexer)\b/i;
+const NOT_BOT = { isBot: false, botId: null, botName: null, operator: null, kind: null, purpose: null, verified: 'unknown', confidence: 0, method: null };
 
 class BotDetector {
-    constructor() {
-        this.botPatterns = {
-            'GPTBot': [
-                /GPTBot/i,
-                /ChatGPT-User/i,
-                /OpenAI/i
-            ],
-            'ClaudeBot': [
-                /ClaudeBot/i,
-                /Claude-Web/i,
-                /Anthropic/i
-            ],
-            'PerplexityBot': [
-                /PerplexityBot/i,
-                /Perplexity/i
-            ],
-            'Google-Extended': [
-                /Google-Extended/i,
-                /GoogleOther/i
-            ],
-            'CCBot': [
-                /CCBot/i,
-                /CommonCrawl/i
-            ],
-            'BingBot': [
-                /bingbot/i,
-                /BingPreview/i
-            ],
-            'FacebookBot': [
-                /facebookexternalhit/i,
-                /FacebookBot/i
-            ],
-            'TwitterBot': [
-                /Twitterbot/i,
-                /TwitterAPI/i
-            ],
-            'LinkedInBot': [
-                /LinkedInBot/i,
-                /LinkedIn/i
-            ],
-            'SlackBot': [
-                /Slackbot/i,
-                /Slack-ImgProxy/i
-            ],
-            'DiscordBot': [
-                /Discordbot/i,
-                /Discord/i
-            ],
-            'TelegramBot': [
-                /TelegramBot/i,
-                /Telegram/i
-            ],
-            'WhatsAppBot': [
-                /WhatsApp/i,
-                /WhatsAppBot/i
-            ],
-            'AppleBot': [
-                /Applebot/i,
-                /AppleNewsBot/i
-            ],
-            'YandexBot': [
-                /YandexBot/i,
-                /YandexImages/i
-            ],
-            'BaiduSpider': [
-                /Baiduspider/i,
-                /BaiduBot/i
-            ],
-            'DuckDuckBot': [
-                /DuckDuckBot/i,
-                /DuckDuckGo/i
-            ]
-        };
-
-        // Known IP ranges for major AI services (examples - should be updated regularly)
-        this.botIPRanges = {
-            'OpenAI': [
-                '20.15.240.64/26',
-                '20.15.240.128/25',
-                '20.15.241.0/24'
-            ],
-            'Anthropic': [
-                // Add known Anthropic IP ranges
-            ],
-            'Google': [
-                '66.249.64.0/19',
-                '64.233.160.0/19',
-                '72.14.192.0/18'
-            ]
-        };
+    /**
+     * @param {Object} [options]
+     * @param {Object<string,string[]>} [options.ipRanges] bot id -> CIDR list (vendor published ranges)
+     * @param {Array<{id,name,pattern,kind?,purpose?,operator?}>} [options.customPatterns] checked before the registry
+     */
+    constructor(options = {}) {
+        this.entries = registry.bots.map((b) => ({ ...b, re: new RegExp(b.ua, 'i') }));
+        this.custom = [];
+        this.ipRanges = options.ipRanges || {};
+        for (const c of options.customPatterns || []) this.addBotPattern(c.name || c.id, c.pattern, c);
     }
 
-    /**
-     * Detect if a request is from an AI bot
-     * @param {string} userAgent - Request user agent
-     * @param {string} ipAddress - Client IP address
-     * @returns {Object} Detection result with bot name and confidence
-     */
+    addBotPattern(botName, pattern, opts = {}) {
+        const re = pattern instanceof RegExp ? new RegExp(pattern.source, 'i') : new RegExp(String(pattern), 'i');
+        this.custom.push({ id: opts.id || String(botName).toLowerCase().replace(/[^a-z0-9]+/g, '-'), name: botName,
+            operator: opts.operator || 'Custom', kind: opts.kind || 'ai', purpose: opts.purpose || 'unknown', ipSources: [], re });
+    }
+
+    setIpRanges(ranges) { this.ipRanges = ranges || {}; }
+
+    getSupportedBots() { return registry.bots.filter((b) => b.kind === 'ai').map((b) => b.name); }
+
+    /** @returns {{isBot:boolean,botId:?string,botName:?string,operator:?string,kind:?string,purpose:?string,verified:string,confidence:number,method:?string}} */
     detectBot(userAgent, ipAddress) {
-        if (!userAgent) {
-            return { isBot: false, botName: null, confidence: 0 };
+        if (!userAgent || typeof userAgent !== 'string') return { ...NOT_BOT };
+        const ua = userAgent.slice(0, MAX_UA);
+        for (const e of [...this.custom, ...this.entries]) {
+            if (e.re.test(ua)) return this.result(e, ipAddress, 0.95, 'user-agent');
         }
+        if (GENERIC.test(ua)) {
+            return this.result({ id: 'generic-bot', name: 'Other crawler', operator: 'Unknown', kind: 'other', purpose: 'unknown', ipSources: [] }, ipAddress, 0.5, 'generic-pattern');
+        }
+        return { ...NOT_BOT };
+    }
 
-        // Check user-agent patterns
-        for (const [botName, patterns] of Object.entries(this.botPatterns)) {
-            for (const pattern of patterns) {
-                if (pattern.test(userAgent)) {
-                    return {
-                        isBot: true,
-                        botName: botName,
-                        confidence: 0.9,
-                        detectionMethod: 'user-agent'
-                    };
-                }
+    result(e, ip, confidence, method) {
+        const list = this.ipRanges[e.id];
+        const verified = !ip || !e.ipSources || e.ipSources.length === 0 || !list || list.length === 0
+            ? 'unknown' : inRanges(ip, list) ? 'verified' : 'unverified';
+        return { isBot: true, botId: e.id, botName: e.name, operator: e.operator, kind: e.kind, purpose: e.purpose, verified, confidence, method };
+    }
+
+    /** Download the vendor-published IP lists (Node 18+). Failures leave existing ranges untouched. */
+    async refreshIpRanges(fetchFn = fetch) {
+        const updated = [];
+        for (const b of registry.bots) {
+            if (!b.ipSources.length) continue;
+            const found = new Set();
+            for (const src of b.ipSources) {
+                try {
+                    const res = await fetchFn(src, { signal: AbortSignal.timeout(10000) });
+                    if (!res.ok) continue;
+                    for (const p of (await res.json()).prefixes || []) if (p.ipv4Prefix || p.ipv6Prefix) found.add(p.ipv4Prefix || p.ipv6Prefix);
+                } catch { /* keep previous ranges */ }
             }
+            if (found.size) { this.ipRanges[b.id] = [...found]; updated.push(b.id); }
         }
-
-        // Check IP ranges (if IP checking is enabled)
-        const ipResult = this.checkIPRanges(ipAddress);
-        if (ipResult.isBot) {
-            return ipResult;
-        }
-
-        // Check for generic bot indicators
-        const genericBotPatterns = [
-            /bot/i,
-            /crawler/i,
-            /spider/i,
-            /scraper/i,
-            /fetcher/i,
-            /indexer/i
-        ];
-
-        for (const pattern of genericBotPatterns) {
-            if (pattern.test(userAgent)) {
-                return {
-                    isBot: true,
-                    botName: 'Generic Bot',
-                    confidence: 0.6,
-                    detectionMethod: 'generic-pattern'
-                };
-            }
-        }
-
-        return { isBot: false, botName: null, confidence: 0 };
-    }
-
-    /**
-     * Check if IP address belongs to known bot ranges
-     * @param {string} ipAddress - Client IP address
-     * @returns {Object} Detection result
-     */
-    checkIPRanges(ipAddress) {
-        // This is a simplified implementation
-        // In production, use a proper IP range checking library
-        for (const [service, ranges] of Object.entries(this.botIPRanges)) {
-            // Simplified check - in real implementation, use proper CIDR matching
-            if (this.isIPInRanges(ipAddress, ranges)) {
-                return {
-                    isBot: true,
-                    botName: `${service} Bot`,
-                    confidence: 0.8,
-                    detectionMethod: 'ip-range'
-                };
-            }
-        }
-        return { isBot: false, botName: null, confidence: 0 };
-    }
-
-    /**
-     * Simplified IP range checking (use proper library in production)
-     * @param {string} ip - IP address to check
-     * @param {Array} ranges - Array of CIDR ranges
-     * @returns {boolean} Whether IP is in any of the ranges
-     */
-    isIPInRanges(ip, ranges) {
-        // This is a placeholder - implement proper CIDR matching
-        // For production, use libraries like 'ip-range-check' or 'netmask'
-        return false;
-    }
-
-    /**
-     * Get all supported bot names
-     * @returns {Array} Array of bot names
-     */
-    getSupportedBots() {
-        return Object.keys(this.botPatterns);
-    }
-
-    /**
-     * Add custom bot pattern
-     * @param {string} botName - Name of the bot
-     * @param {RegExp} pattern - Regular expression pattern
-     */
-    addBotPattern(botName, pattern) {
-        if (!this.botPatterns[botName]) {
-            this.botPatterns[botName] = [];
-        }
-        this.botPatterns[botName].push(pattern);
+        return updated;
     }
 }
 

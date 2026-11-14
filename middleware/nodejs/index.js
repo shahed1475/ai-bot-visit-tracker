@@ -1,191 +1,130 @@
 const path = require('path');
 const BotDetector = require('../../core/bot-detector');
-const Logger = require('../../core/logger');
+const Classifier = require('../../core/classifier');
 const Database = require('../../core/database');
+const { Reporter } = require('../../core/reporter');
+
+const SENSITIVE_HEADERS = new Set(['authorization', 'cookie', 'set-cookie', 'x-api-key', 'x-auth-token', 'proxy-authorization']);
 
 /**
- * AI Bot Visit Tracker Middleware for Express.js
- * 
- * This middleware detects AI bot visits, logs them to a database,
- * and classifies them as indexing or retrieval requests.
+ * AI Bot Visit Tracker for Express (and anything with (req, res, next)).
+ *
+ * Options:
+ *   database: { type: 'sqlite', path } | false     local storage (default: ./data/bot_visits.db); false disables it
+ *   report:   { endpoint, key, site }              also send visits to the Cloudflare tracker
+ *   skipNonBots (true), asyncLogging (true), enableLogging (true), addHeaders (false), headerPrefix
+ *   customBotPatterns: [{ id, name, pattern, kind, purpose }], ipRanges: { botId: [cidr] }
+ *   trustCloudflareHeaders (false): use CF-Connecting-IP as the client IP (only if you sit behind Cloudflare)
  */
 class AiBotTracker {
     constructor(options = {}) {
         this.options = {
-            // Database configuration
-            database: {
-                type: options.database?.type || 'sqlite',
-                path: options.database?.path || path.join(__dirname, '../../data/bot_visits.db'),
-                host: options.database?.host,
-                port: options.database?.port,
-                username: options.database?.username,
-                password: options.database?.password,
-                database: options.database?.database
-            },
-            
-            // Logging configuration
-            enableLogging: options.enableLogging !== false,
-            logLevel: options.logLevel || 'info',
-            
-            // Bot detection configuration
-            customBotPatterns: options.customBotPatterns || [],
-            ipRanges: options.ipRanges || [],
-            
-            // Classification configuration
-            classificationRules: options.classificationRules || {},
-            
-            // Performance options
+            database: options.database === false ? false : { type: 'sqlite', path: path.join(process.cwd(), 'data', 'bot_visits.db'), ...(options.database || {}) },
+            report: options.report || null,
             skipNonBots: options.skipNonBots !== false,
-            asyncLogging: options.asyncLogging !== false
+            asyncLogging: options.asyncLogging !== false,
+            enableLogging: options.enableLogging !== false,
+            addHeaders: options.addHeaders === true,
+            headerPrefix: options.headerPrefix || 'X-Bot-Tracker-',
+            trustCloudflareHeaders: options.trustCloudflareHeaders === true
         };
-        
-        this.botDetector = new BotDetector({
-            customPatterns: this.options.customBotPatterns,
-            ipRanges: this.options.ipRanges
-        });
-        
-        this.database = new Database(this.options.database);
-        this.logger = new Logger(this.database, this.botDetector, this.options);
-        
+        this.botDetector = new BotDetector({ customPatterns: options.customBotPatterns, ipRanges: options.ipRanges });
+        this.classifier = new Classifier();
+        this.database = this.options.database ? new Database(this.options.database) : null;
+        this.reporter = this.options.report ? new Reporter(this.options.report) : null;
         this.initialized = false;
+        this._init = null;
     }
-    
-    /**
-     * Initialize the tracker (connect to database, setup schema)
-     */
-    async initialize() {
-        if (this.initialized) return;
-        
-        try {
-            await this.database.connect();
-            await this.database.initialize();
-            await this.logger.initialize();
-            this.initialized = true;
-            
-            if (this.options.enableLogging) {
-                console.log('[AiBotTracker] Initialized successfully');
-            }
-        } catch (error) {
-            console.error('[AiBotTracker] Initialization failed:', error);
-            throw error;
+
+    initialize() {
+        if (!this._init) {
+            this._init = (async () => {
+                if (this.database) await this.database.connect();
+                this.initialized = true;
+                if (this.options.enableLogging) console.log('[AiBotTracker] ready');
+            })().catch((err) => { this._init = null; throw err; });
         }
+        return this._init;
     }
-    
-    /**
-     * Express middleware function
-     */
+
+    clientIp(req) {
+        if (this.options.trustCloudflareHeaders && req.headers['cf-connecting-ip']) return String(req.headers['cf-connecting-ip']);
+        return req.ip || (req.socket && req.socket.remoteAddress) || (req.connection && req.connection.remoteAddress) || '';
+    }
+
     middleware() {
         return async (req, res, next) => {
             try {
-                // Initialize if not already done
-                if (!this.initialized) {
-                    await this.initialize();
-                }
-                
-                // Quick bot detection check
-                const botInfo = this.botDetector.detectBot(req.get('User-Agent'), req.ip);
-                
-                // Skip non-bots if configured to do so
-                if (this.options.skipNonBots && !botInfo.isBot) {
-                    return next();
-                }
-                
-                // Log the request (async or sync based on configuration)
-                if (this.options.asyncLogging) {
-                    // Don't wait for logging to complete
-                    this.logger.logRequest(req, botInfo).catch(error => {
-                        if (this.options.enableLogging) {
-                            console.error('[AiBotTracker] Async logging error:', error);
-                        }
+                if (!this.initialized) await this.initialize();
+                const ip = this.clientIp(req);
+                const info = this.botDetector.detectBot(req.get ? req.get('User-Agent') : req.headers['user-agent'], ip);
+                if (!info.isBot && this.options.skipNonBots) return next();
+                req.botInfo = info;
+                if (info.isBot) {
+                    const started = Date.now(); // per request: never shared on the instance
+                    const snapshot = this.snapshot(req, ip);
+                    if (this.options.addHeaders) {
+                        res.setHeader(`${this.options.headerPrefix}Detected`, 'true');
+                        res.setHeader(`${this.options.headerPrefix}Bot-Name`, info.botName);
+                    }
+                    res.once('finish', () => {
+                        const job = this.record(snapshot, info, res.statusCode, Date.now() - started);
+                        if (!this.options.asyncLogging) return job;
+                        job.catch(() => {});
                     });
-                } else {
-                    // Wait for logging to complete
-                    await this.logger.logRequest(req, botInfo);
                 }
-                
-                // Add bot info to request object for downstream use
-                req.botInfo = botInfo;
-                
-            } catch (error) {
-                if (this.options.enableLogging) {
-                    console.error('[AiBotTracker] Middleware error:', error);
-                }
-                // Don't block the request on errors
+            } catch (err) {
+                if (this.options.enableLogging) console.error('[AiBotTracker] error:', err.message);
             }
-            
             next();
         };
     }
-    
-    /**
-     * Get statistics about bot visits
-     */
-    async getStats(options = {}) {
-        if (!this.initialized) {
-            await this.initialize();
-        }
-        return await this.logger.getStats(options);
+
+    snapshot(req, ip) {
+        const headers = {};
+        for (const [k, v] of Object.entries(req.headers || {})) if (!SENSITIVE_HEADERS.has(k.toLowerCase())) headers[k] = v;
+        const host = req.get ? req.get('host') : req.headers.host;
+        return { ip, headers, method: req.method, url: (req.originalUrl || req.url || '/').split(/[?#]/)[0], host,
+            pageUrl: `${req.protocol || 'http'}://${host}${(req.originalUrl || req.url || '/').split(/[?#]/)[0]}`,
+            ua: (req.get ? req.get('User-Agent') : req.headers['user-agent']) || '', referer: (req.get ? req.get('Referer') : req.headers.referer) || '' };
     }
-    
-    /**
-     * Export data to CSV
-     */
-    async exportToCsv(filePath, options = {}) {
-        if (!this.initialized) {
-            await this.initialize();
+
+    async record(s, info, status, ms) {
+        try {
+            const c = this.classifier.classifyRequest({ userAgent: s.ua, headers: s.headers, url: s.url, ipAddress: s.ip,
+                referer: s.referer, purpose: info.purpose, botName: info.botName });
+            if (this.database) {
+                await this.database.logVisit({ ipAddress: s.ip, botId: info.botId, botName: info.botName, botKind: info.kind, pageUrl: s.pageUrl,
+                    headers: s.headers, classification: c.classification, verified: info.verified, userAgent: s.ua, referer: s.referer,
+                    requestMethod: s.method, responseStatus: status, processingTimeMs: ms });
+            }
+            if (this.reporter) this.reporter.add({ ip: s.ip, ua: s.ua, path: s.url, method: s.method, status, referer: s.referer || undefined });
+        } catch (err) {
+            if (this.options.enableLogging) console.error('[AiBotTracker] record failed:', err.message);
         }
-        return await this.logger.exportToCsv(filePath, options);
     }
-    
-    /**
-     * Export data to JSON
-     */
-    async exportToJson(filePath, options = {}) {
-        if (!this.initialized) {
-            await this.initialize();
-        }
-        return await this.logger.exportToJson(filePath, options);
+
+    /** Express handler for GET /ai-bot-tracker/stats (protect it behind your own auth). */
+    statsHandler() {
+        return async (_req, res) => {
+            try { res.json({ bots: await this.getStats() }); } catch { res.status(500).json({ error: 'stats unavailable' }); }
+        };
     }
-    
-    /**
-     * Clean up old logs
-     */
-    async cleanup(daysToKeep = 30) {
-        if (!this.initialized) {
-            await this.initialize();
-        }
-        return await this.logger.cleanup(daysToKeep);
-    }
-    
-    /**
-     * Close database connections
-     */
+
+    async getStats() { await this.initialize(); return this.database ? this.database.getBotStats() : []; }
+    async getRecentVisits(limit = 50) { await this.initialize(); return this.database ? this.database.getRecentVisits(limit) : []; }
+    async exportToJson(filters = {}) { await this.initialize(); return this.database ? this.database.exportToJSON(filters) : []; }
+    async cleanup(days = 90) { await this.initialize(); return this.database ? this.database.cleanupOldVisits(days) : 0; }
+
     async close() {
-        if (this.database) {
-            await this.database.close();
-        }
+        if (this.reporter) await this.reporter.flush();
+        if (this.database) await this.database.close();
         this.initialized = false;
+        this._init = null;
     }
 }
 
-/**
- * Factory function to create middleware instance
- */
-function createAiBotTracker(options = {}) {
-    return new AiBotTracker(options);
-}
+const createAiBotTracker = (options = {}) => new AiBotTracker(options);
+const quickSetup = (app, options = {}) => { const t = createAiBotTracker(options); app.use(t.middleware()); return t; };
 
-/**
- * Quick setup function for basic usage
- */
-function quickSetup(app, options = {}) {
-    const tracker = createAiBotTracker(options);
-    app.use(tracker.middleware());
-    return tracker;
-}
-
-module.exports = {
-    AiBotTracker,
-    createAiBotTracker,
-    quickSetup
-};
+module.exports = { AiBotTracker, createAiBotTracker, quickSetup };

@@ -11,6 +11,19 @@ from user_agents import parse
 from django.utils import timezone
 from django.core.cache import cache
 
+# Shared bot registry (signatures/ai-bots.json) via core/signatures.py when running from the repo.
+try:
+    import sys as _sys
+    from pathlib import Path as _Path
+    _root = _Path(__file__).resolve().parents[4]
+    if (_root / "signatures" / "ai-bots.json").exists():
+        _sys.path.insert(0, str(_root))
+        from core import signatures as _signatures
+    else:
+        _signatures = None
+except Exception:  # pragma: no cover - fall back to the built-in list below
+    _signatures = None
+
 
 class BotDetector:
     """Detects AI bots based on user-agent patterns and IP ranges"""
@@ -84,7 +97,12 @@ class BotDetector:
         """
         if not user_agent:
             return False, None, 0.0
-        
+
+        if _signatures is not None:
+            shared = _signatures.match(user_agent)
+            if shared:
+                return True, shared['name'], 0.5 if shared['id'] == 'generic-bot' else 0.95
+
         # Check user agent patterns
         for bot_name, patterns in self.compiled_patterns.items():
             for pattern in patterns:
@@ -124,8 +142,11 @@ class BotDetector:
         
         # Parse user agent for additional info
         parsed_ua = parse(user_agent)
-        
+        shared = _signatures.match(user_agent) if (_signatures is not None and is_bot) else None
+
         return {
+            'purpose': shared['purpose'] if shared else None,
+            'kind': shared['kind'] if shared else None,
             'is_bot': is_bot,
             'bot_name': bot_name,
             'confidence': confidence,
