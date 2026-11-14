@@ -1,0 +1,3 @@
+DASHBOARD_PASSWORD=change-me
+INGEST_KEY=change-me-too
+SESSION_SECRET=a-long-random-string

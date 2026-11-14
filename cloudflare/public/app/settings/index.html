@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1217" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex">
+  <title>Sites and account | AI Bot Tracker</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/app/app.css">
+  <link rel="stylesheet" href="/site.css">
+  <script type="module" src="/app/settings/settings.js"></script>
+</head>
+<body>
+  <header class="wrap"><nav class="nav" aria-label="Main">
+    <a class="brand" href="/app/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
+    <a href="/app/">Dashboard</a><a href="/docs/">Setup guide</a>
+    <button class="btn" id="logout" type="button">Sign out</button>
+  </nav></header>
+  <main class="settings" id="main">
+    <p id="welcome" class="panel ok" role="status" hidden>Your account is ready. Add the website you want to watch, then connect it with the setup guide.</p>
+    <section class="panel" aria-labelledby="sites-h">
+      <div class="panel-head"><h2 id="sites-h">Your sites</h2><span class="muted small" id="site-count"></span></div>
+      <div id="key-area"></div>
+      <div id="sites"></div>
+      <form class="inline-form" id="add-site" novalidate>
+        <label class="sr" for="hostname">Website hostname</label>
+        <input id="hostname" class="field-input" placeholder="example.com" autocomplete="off" autocapitalize="none" spellcheck="false" inputmode="url">
+        <button class="btn primary" type="submit">Add site</button>
+      </form>
+      <p class="hint">Enter the hostname only, for example <code>example.com</code>. Each site gets its own private key.</p>
+      <p id="site-error" class="error" role="alert" hidden></p>
+    </section>
+    <section class="panel" aria-labelledby="acct-h">
+      <div class="panel-head"><h2 id="acct-h">Account</h2><span class="muted small" id="email"></span></div>
+      <form class="stack" id="pw-form" novalidate>
+        <h3>Change password</h3>
+        <label for="cur">Current password</label><input id="cur" type="password" autocomplete="current-password">
+        <label for="new">New password</label><input id="new" type="password" autocomplete="new-password">
+        <p class="hint">At least 10 characters. Changing it signs you out everywhere else.</p>
+        <button class="btn" type="submit">Change password</button>
+        <p id="pw-msg" class="error" role="status" hidden></p>
+      </form>
+      <form class="stack" id="del-form" novalidate>
+        <h3>Delete account</h3>
+        <p class="hint">Deletes your account, sites and all recorded visits. This cannot be undone.</p>
+        <label for="del-pw">Password</label><input id="del-pw" type="password" autocomplete="current-password">
+        <button class="btn danger" type="submit">Delete my account and data</button>
+        <p id="del-msg" class="error" role="alert" hidden></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

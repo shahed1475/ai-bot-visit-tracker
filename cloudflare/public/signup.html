@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1217" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex">
+  <title>Create account | AI Bot Tracker</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app/app.css">
+  <link rel="stylesheet" href="/site.css">
+  <script type="module" src="/auth.js"></script>
+</head>
+<body data-mode="signup">
+  <main class="auth">
+    <div class="auth-box">
+      <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
+      <h1>Create your account</h1>
+      <p class="muted">Track the AI bots that read your website. Takes about two minutes.</p>
+      <form id="form" novalidate>
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="email" inputmode="email" required>
+        <label for="password">Password</label>
+        <input id="password" type="password" autocomplete="new-password" required aria-describedby="pw-hint">
+        <p class="hint" id="pw-hint">At least 10 characters.</p>
+        <div class="hp" aria-hidden="true"><label>Website <input id="website" name="website" tabindex="-1" autocomplete="off"></label></div><div id="turnstile"></div>
+        <p id="error" class="error" role="alert" tabindex="-1" hidden></p>
+        <button id="submit" class="btn primary large link-btn" type="submit">Create account</button>
+      </form>
+      <p class="alt">Already have an account? <a href="/login">Sign in</a></p>
+      <p class="hint"><a href="/demo/">Look at the live demo first</a></p>
+    </div>
+  </main>
+</body>
+</html>

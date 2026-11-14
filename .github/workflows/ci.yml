@@ -1,0 +1,27 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  middleware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: shivammathur/setup-php@v2
+        with: { php-version: "8.3", extensions: pdo_sqlite }
+      - run: npm ci
+      - run: pip install flask django user-agents
+      - run: python3 tests/run_all_tests.py registry node pwa python php
+  worker:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: cloudflare } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npx wrangler types && npx tsc --noEmit
+      - run: npm test
+      - run: npx wrangler deploy --dry-run
