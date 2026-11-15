@@ -62,6 +62,19 @@ class DetectorTest(unittest.TestCase):
             self.assertFalse(signatures.in_ranges(bad, ["1.2.3.0/24"]))
 
 
+class ReporterPayloadTest(unittest.TestCase):
+    def test_reported_events_carry_no_query_string_cookie_or_header(self):
+        from core.tracker_python import BotTracker
+
+        t = BotTracker({"database": False, "async_logging": False})
+        sent = []
+        t.reporter = type("Capture", (), {"add": lambda self, event: sent.append(event)})()
+        info = t.inspect(GPT, "203.0.113.9")
+        t.record(info, ip="203.0.113.9", user_agent=GPT, url="https://example.com/pricing?token=abc#top", method="GET", status=200,
+                 referer="https://news.example/p?id=7&sid=secret#frag", headers={"cookie": "s=1", "authorization": "Bearer x"}, elapsed_ms=3)
+        self.assertEqual(sent, [{"ip": "203.0.113.9", "ua": GPT, "path": "/pricing", "method": "GET", "status": 200, "referer": "https://news.example/p"}])
+
+
 class FlaskTest(unittest.TestCase):
     def test_flask_logs_bot_not_human(self):
         from flask import Flask

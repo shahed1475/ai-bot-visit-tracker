@@ -64,6 +64,7 @@ class BotTracker:
                     self.db.log_visit(visit)
             if self.reporter:
                 path = "/" + url.split("://", 1)[-1].split("/", 1)[-1] if "://" in url else url
-                self.reporter.add({"ip": ip, "ua": user_agent, "path": path, "method": method, "status": status, **({"referer": referer} if referer else {})})
+                clean_referer = (referer or "").split("?", 1)[0].split("#", 1)[0]  # query strings never leave the server
+                self.reporter.add({"ip": ip, "ua": user_agent, "path": path, "method": method, "status": status, **({"referer": clean_referer} if clean_referer else {})})
         except Exception:
             pass  # tracking must never break a request

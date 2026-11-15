@@ -130,3 +130,19 @@ test('reporter.send resolves false (never throws) on network failure', async () 
   const rep = new Reporter({ endpoint: 'http://127.0.0.1:1', key: 'k', site: 's', timeoutMs: 300, flushMs: 0 });
   assert.equal(await rep.send([{ ua: GPT, path: '/' }]), false);
 });
+
+test('reported events never carry a query string, cookie or header (path and referer are cleaned at the source)', async () => {
+  let got;
+  const server = http.createServer((req, res) => {
+    let body = ''; req.on('data', (c) => (body += c));
+    req.on('end', () => { got = JSON.parse(body); res.end('{"stored":1}'); });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const t = new AiBotTracker({ database: false, enableLogging: false, report: { endpoint: `http://127.0.0.1:${server.address().port}`, key: 'k', site: 's.test', flushMs: 0 } });
+  const info = t.botDetector.detectBot(GPT, '203.0.113.9');
+  await t.record({ ip: '203.0.113.9', headers: { cookie: 's=1', authorization: 'Bearer x' }, method: 'GET', url: '/pricing', host: 'example.com',
+    pageUrl: 'http://example.com/pricing', ua: GPT, referer: 'https://news.example/p?id=7&sid=secret#frag' }, info, 200, 1);
+  await t.close();
+  server.close();
+  assert.deepEqual(got.events[0], { site: 's.test', ip: '203.0.113.9', ua: GPT, path: '/pricing', method: 'GET', status: 200, referer: 'https://news.example/p' });
+});

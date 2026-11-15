@@ -9,6 +9,7 @@ class Reporter {
         Object.assign(this, { key, site, timeoutMs, flushMs, maxBatch, maxQueue });
         this.queue = [];
         this.timer = null;
+        this.inflight = new Set(); // batches being sent right now, so flush() and close() can wait for them
     }
 
     /** Queue one event ({ip, ua, path, method, status, referer}). */
@@ -19,11 +20,18 @@ class Reporter {
         if (!this.timer) { this.timer = setTimeout(() => this.flush(), this.flushMs); this.timer.unref(); }
     }
 
+    /** Resolves when everything queued so far has been sent (or has failed). Never throws. */
     async flush() {
         clearTimeout(this.timer); this.timer = null;
         const batch = this.queue.splice(0, this.maxBatch);
-        if (batch.length) await this.send(batch);
+        if (batch.length) {
+            const sending = this.send(batch);
+            this.inflight.add(sending);
+            sending.finally(() => this.inflight.delete(sending));
+            await sending;
+        }
         if (this.queue.length) return this.flush();
+        await Promise.all([...this.inflight]); // batches another flush() started and is still waiting on
     }
 
     /** @returns {Promise<boolean>} true when the tracker accepted the batch */

@@ -98,7 +98,7 @@ class AiBotTracker {
                     headers: s.headers, classification: c.classification, verified: info.verified, userAgent: s.ua, referer: s.referer,
                     requestMethod: s.method, responseStatus: status, processingTimeMs: ms });
             }
-            if (this.reporter) this.reporter.add({ ip: s.ip, ua: s.ua, path: s.url, method: s.method, status, referer: s.referer || undefined });
+            if (this.reporter) this.reporter.add({ ip: s.ip, ua: s.ua, path: s.url, method: s.method, status, referer: s.referer.split(/[?#]/)[0] || undefined }); // query strings never leave the server
         } catch (err) {
             if (this.options.enableLogging) console.error('[AiBotTracker] record failed:', err.message);
         }
