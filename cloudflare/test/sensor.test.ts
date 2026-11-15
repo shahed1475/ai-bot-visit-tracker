@@ -25,6 +25,23 @@ describe("edge sensor", () => {
     expect((seen!.init.headers as Record<string, string>).authorization).toBe("Bearer abt_key");
     expect(JSON.parse(seen!.init.body as string)).toMatchObject({ path: "/blog/post", status: 404, ip: "8.8.8.8" });
   });
+  it("never sends a query string or fragment from the referer", async () => {
+    let body: Record<string, unknown> = {};
+    const ctx = createExecutionContext();
+    const r = new Request("https://site.test/blog/post?utm=1", { headers: { "user-agent": GPT, referer: "https://news.example/p?id=7&sid=secret#frag" } });
+    await handleSensor(r, env, ctx, async () => new Response("ok"), (async (_u: string, init: RequestInit) => { body = JSON.parse(init.body as string); return new Response("{}"); }) as unknown as typeof fetch);
+    await waitOnExecutionContext(ctx);
+    expect(body.referer).toBe("https://news.example/p");
+    expect(JSON.stringify(body)).not.toContain("secret");
+    expect(body.path).toBe("/blog/post");
+  });
+  it("omits the referer when there is none", async () => {
+    let body: Record<string, unknown> = {};
+    const ctx = createExecutionContext();
+    await handleSensor(req(GPT), env, ctx, async () => new Response("ok"), (async (_u: string, init: RequestInit) => { body = JSON.parse(init.body as string); return new Response("{}"); }) as unknown as typeof fetch);
+    await waitOnExecutionContext(ctx);
+    expect("referer" in body).toBe(false);
+  });
   it("still returns the origin response when the tracker is down", async () => {
     const ctx = createExecutionContext();
     const res = await handleSensor(req(GPT), env, ctx, async () => new Response("ok"), (async () => { throw new Error("down"); }) as typeof fetch);

@@ -16,7 +16,7 @@ describe("sites", () => {
     expect(s.body.site).toMatchObject({ hostname: "example.com" });
     expect(s.key).toMatch(/^abt_[A-Za-z0-9_-]{43}$/);
     expect(s.body.site!.keyPrefix).toBe(s.key.slice(0, 10));
-    const row = await env.DB.prepare("SELECT key_hash FROM sites").first<{ key_hash: string }>();
+    const row = await env.DB.prepare("SELECT key_hash FROM api_keys").first<{ key_hash: string }>();
     expect(row!.key_hash).toMatch(/^[0-9a-f]{64}$/);
     const list = await (await call("/api/sites", { cookie })).json() as { sites: Record<string, unknown>[] };
     expect(list.sites).toHaveLength(1);

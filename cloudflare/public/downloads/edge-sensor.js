@@ -516,7 +516,8 @@ async function handleSensor(request, env, ctx, origin = (r) => fetch(r), send = 
           path: url.pathname,
           method: request.method,
           status: response.status,
-          referer: request.headers.get("referer") ?? void 0,
+          referer: request.headers.get("referer")?.split(/[?#]/)[0] || void 0,
+          // query strings never leave the visitor's request
           country: cf?.country,
           asn: cf?.asn,
           asOrg: cf?.asOrganization

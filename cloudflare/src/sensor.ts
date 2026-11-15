@@ -24,7 +24,7 @@ export async function handleSensor(request: Request, env: SensorEnv, ctx: Execut
         headers: { authorization: `Bearer ${env.TRACKER_KEY}`, "content-type": "application/json" },
         body: JSON.stringify({
           ip: request.headers.get("cf-connecting-ip"), ua: request.headers.get("user-agent") ?? "", path: url.pathname,
-          method: request.method, status: response.status, referer: request.headers.get("referer") ?? undefined,
+          method: request.method, status: response.status, referer: request.headers.get("referer")?.split(/[?#]/)[0] || undefined, // query strings never leave the visitor's request
           country: cf?.country, asn: cf?.asn, asOrg: cf?.asOrganization,
         }),
       });

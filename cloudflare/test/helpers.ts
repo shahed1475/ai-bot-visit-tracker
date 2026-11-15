@@ -27,7 +27,7 @@ export async function addSite(cookie: string, hostname: string) {
 export const ingest = (key: string, body: unknown) => call("/api/ingest", { json: body, headers: { authorization: `Bearer ${key}` } });
 
 export async function resetDb() {
-  const tables = ["visits", "visit_hourly", "ip_ranges", "meta", "sessions", "sites", "users"];
+  const tables = ["api_keys", "visits", "visit_hourly", "ip_ranges", "meta", "sessions", "sites", "users"];
   await env.DB.batch(tables.map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
 }
 export const GPT = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot";

@@ -45,7 +45,7 @@ async function startSession(env: Env, userId: number): Promise<string> {
 }
 const clearCookie = `${COOKIE}=; ${ATTRS}; Max-Age=0`;
 
-async function readJson(request: Request): Promise<Record<string, any> | null> {
+export async function readJson(request: Request): Promise<Record<string, any> | null> {
   try {
     const text = await request.text();
     if (text.length > 8192) return null;
@@ -132,19 +132,21 @@ async function deleteAccount(request: Request, env: Env, user: User): Promise<Re
   await deleteSitesData(env, "SELECT id FROM sites WHERE user_id = ?", user.id);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM sessions WHERE user_id = ?").bind(user.id),
+    env.DB.prepare("DELETE FROM api_keys WHERE user_id = ?").bind(user.id), // includes read keys that are not tied to a site
     env.DB.prepare("DELETE FROM sites WHERE user_id = ?").bind(user.id),
     env.DB.prepare("DELETE FROM users WHERE id = ?").bind(user.id),
   ]);
   return json({ ok: true }, 200, { "set-cookie": clearCookie });
 }
 
-/** Delete visits in chunks (a single huge DELETE can time out) plus the rollup rows. */
+/** Delete visits in chunks (a single huge DELETE can time out) plus the rollup rows and the sites' keys. */
 export async function deleteSitesData(env: Env, siteIdsSql: string, param: number) {
   for (let i = 0; i < 500; i++) {
     const r = await env.DB.prepare(`DELETE FROM visits WHERE id IN (SELECT id FROM visits WHERE site_id IN (${siteIdsSql}) LIMIT 1000)`).bind(param).run();
     if ((r.meta.changes ?? 0) < 1000) break;
   }
   await env.DB.prepare(`DELETE FROM visit_hourly WHERE site_id IN (${siteIdsSql})`).bind(param).run();
+  await env.DB.prepare(`DELETE FROM api_keys WHERE site_id IN (${siteIdsSql})`).bind(param).run();
 }
 
 export async function handleAuth(request: Request, env: Env, pathname: string): Promise<Response | null> {

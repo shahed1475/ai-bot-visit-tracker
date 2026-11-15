@@ -1,4 +1,3 @@
-import type { User } from "./auth";
 import { BOTS } from "./registry";
 
 const SPANS: Record<string, number> = { "24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400 };
@@ -118,14 +117,23 @@ async function exportRows(env: Env, w: Win) {
   return results;
 }
 
-export async function handleApi(request: Request, env: Env, url: URL, user: User): Promise<Response | null> {
+/** Who is asking: a signed-in user (all of their sites) or a read key (all of its owner's sites, or just one). */
+export interface Scope { userId: number; siteId: number | null }
+
+export async function scopedSites(env: Env, scope: Scope) {
+  const { results } = await env.DB.prepare("SELECT id, hostname FROM sites WHERE user_id = ? AND (? IS NULL OR id = ?) ORDER BY id")
+    .bind(scope.userId, scope.siteId, scope.siteId).all<{ id: number; hostname: string }>();
+  return results;
+}
+
+export async function handleApi(request: Request, env: Env, url: URL, scope: Scope): Promise<Response | null> {
   const p = url.pathname;
   const routes = ["/api/summary", "/api/timeseries", "/api/bots", "/api/pages", "/api/heatmap", "/api/recent", "/api/export.csv", "/api/export.json"];
   if (!routes.includes(p)) return null;
   if (request.method !== "GET") return json({ error: "method_not_allowed" }, 405);
 
-  // Tenant scope comes from the session, never from the request: only this user's sites are ever queried.
-  const { results: sites } = await env.DB.prepare("SELECT id, hostname FROM sites WHERE user_id = ? ORDER BY id").bind(user.id).all<{ id: number; hostname: string }>();
+  // Tenant scope comes from the session or the key, never from the request: only its sites are ever queried.
+  const sites = await scopedSites(env, scope);
   let ids = sites.map((s) => s.id);
   const requested = url.searchParams.get("site");
   if (requested && requested !== "all") {

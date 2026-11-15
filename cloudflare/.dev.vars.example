@@ -1,3 +1,4 @@
-DASHBOARD_PASSWORD=change-me
-INGEST_KEY=change-me-too
-SESSION_SECRET=a-long-random-string
+# Optional: Cloudflare Turnstile spam protection for signups. Leave both out to run without it.
+# Copy this file to .dev.vars for local development (it is git-ignored). In production use `wrangler secret put TURNSTILE_SECRET`.
+# TURNSTILE_SECRET=
+# TURNSTILE_SITEKEY=

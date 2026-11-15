@@ -1,17 +1,16 @@
-import { sha256Hex } from "./crypto";
+import { authenticateKey } from "./keys";
 import { isEvent, recordVisits, type VisitEvent } from "./store";
 
 const MAX_BODY = 256 * 1024;
 const MAX_EVENTS = 100;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-/** The Bearer key identifies the site (and therefore the owner). Any `site` field in the payload is ignored. */
+/** The Bearer ingest key identifies the site (and therefore the owner). Any `site` field in the payload is ignored. */
 export async function handleIngest(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405);
-  const auth = request.headers.get("authorization") ?? "";
-  if (!auth.startsWith("Bearer abt_")) return json({ error: "unauthorized" }, 401);
-  const site = await env.DB.prepare("SELECT id FROM sites WHERE key_hash = ?").bind(await sha256Hex(auth.slice(7))).first<{ id: number }>();
-  if (!site) return json({ error: "unauthorized" }, 401);
+  const key = await authenticateKey(request, env, "ingest");
+  if (!key || key.siteId === null) return json({ error: "unauthorized" }, 401);
+  const site = { id: key.siteId };
 
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return json({ error: "too_large" }, 413);
   const text = await request.text();
