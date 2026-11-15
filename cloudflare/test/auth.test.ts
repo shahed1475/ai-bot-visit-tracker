@@ -126,6 +126,14 @@ describe("login and logout", () => {
     const same = await call("/api/sites", { json: { hostname: "x.com" }, cookie, headers: { origin: "https://t.test" } });
     expect(same.status).toBe(201);
   });
+  it("answers 403, not 500, to an Origin that is not a URL", async () => {
+    const { cookie } = await signup("b@example.com");
+    for (const origin of ["null", "not a url", "http://["]) {
+      const res = await call("/api/sites", { json: { hostname: "y.com" }, cookie, headers: { origin } });
+      expect(res.status, `origin ${origin}`).toBe(403);
+      expect(await res.json()).toEqual({ error: "forbidden_origin" });
+    }
+  });
 });
 
 describe("account management", () => {

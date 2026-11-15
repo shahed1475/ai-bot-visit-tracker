@@ -23,6 +23,28 @@ describe("refreshIpRanges", () => {
     expect(await ranges("gptbot")).toEqual(["20.15.240.64/26", "2001:db8::/32"]);
     expect(await ranges("googlebot")).toEqual(["66.249.64.0/27"]);
   });
+  it("applies a diff: only new ranges are added and only stale ones removed, and it reports both", async () => {
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO ip_ranges (bot_id,cidr) VALUES ('gptbot','20.15.240.64/26')"),
+      env.DB.prepare("INSERT INTO ip_ranges (bot_id,cidr) VALUES ('gptbot','9.9.9.0/24')"),
+    ]);
+    const fake = async (url: string | URL | Request) =>
+      String(url).includes("openai.com/gptbot.json")
+        ? Response.json({ prefixes: [{ ipv4Prefix: "20.15.240.64/26" }, { ipv4Prefix: "52.230.152.0/24" }] })
+        : new Response("nope", { status: 500 });
+    const out = await refreshIpRanges(env, fake as typeof fetch);
+    expect(await ranges("gptbot")).toEqual(["20.15.240.64/26", "52.230.152.0/24"]);
+    expect(out).toMatchObject({ added: 1, removed: 1 });
+  });
+  it("writes nothing when the vendor list has not changed", async () => {
+    const fake = async (url: string | URL | Request) =>
+      String(url).includes("openai.com/gptbot.json")
+        ? Response.json({ prefixes: [{ ipv4Prefix: "20.15.240.64/26" }] })
+        : new Response("nope", { status: 500 });
+    await refreshIpRanges(env, fake as typeof fetch);
+    expect(await refreshIpRanges(env, fake as typeof fetch)).toMatchObject({ added: 0, removed: 0 });
+    expect(await ranges("gptbot")).toEqual(["20.15.240.64/26"]);
+  });
   it("survives a fetch that throws and a non-JSON body", async () => {
     const fake = async (url: string | URL | Request) => {
       if (String(url).includes("perplexitybot")) throw new Error("boom");

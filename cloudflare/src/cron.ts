@@ -17,10 +17,16 @@ async function fetchPrefixes(url: string, fetchFn: Fetch): Promise<string[] | nu
   }
 }
 
-/** Replace a bot's ranges only when at least one of its sources returned data. */
+/**
+ * Bring a bot's stored ranges in line with what its sources published, writing only the difference.
+ * Nothing is replaced unless at least one source answered, and unchanged ranges are never touched, so a
+ * failed batch cannot leave a bot with no ranges and an unchanged list costs no D1 writes.
+ */
 export async function refreshIpRanges(env: Pick<Env, "DB">, fetchFn: Fetch = fetch) {
   const updated: string[] = [];
   const failed: string[] = [];
+  let added = 0;
+  let removed = 0;
   for (const bot of BOTS) {
     if (bot.ipSources.length === 0) continue;
     const found = new Set<string>();
@@ -30,15 +36,22 @@ export async function refreshIpRanges(env: Pick<Env, "DB">, fetchFn: Fetch = fet
       if (list) { anyOk = true; list.forEach((c) => found.add(c)); }
     }
     if (!anyOk || found.size === 0) { failed.push(bot.id); continue; }
-    const del = env.DB.prepare("DELETE FROM ip_ranges WHERE bot_id = ?").bind(bot.id);
+    const { results } = await env.DB.prepare("SELECT cidr FROM ip_ranges WHERE bot_id = ?").bind(bot.id).all<{ cidr: string }>();
+    const have = new Set(results.map((r) => r.cidr));
+    const toAdd = [...found].filter((c) => !have.has(c));
+    const toRemove = [...have].filter((c) => !found.has(c));
     const ins = env.DB.prepare("INSERT OR IGNORE INTO ip_ranges (bot_id, cidr) VALUES (?, ?)");
-    const stmts = [del, ...[...found].map((c) => ins.bind(bot.id, c))];
+    const del = env.DB.prepare("DELETE FROM ip_ranges WHERE bot_id = ? AND cidr = ?");
+    // Additions first: the bot is never short of ranges between batches.
+    const stmts = [...toAdd.map((c) => ins.bind(bot.id, c)), ...toRemove.map((c) => del.bind(bot.id, c))];
     for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+    added += toAdd.length;
+    removed += toRemove.length;
     updated.push(bot.id);
   }
   await env.DB.prepare("INSERT INTO meta (key,value) VALUES ('ranges_refreshed_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
     .bind(String(Math.floor(Date.now() / 1000))).run();
-  return { updated, failed };
+  return { updated, failed, added, removed };
 }
 
 /** Deletes old rows in chunks of 1000 (large single deletes can time out). */
