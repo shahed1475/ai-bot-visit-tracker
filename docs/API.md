@@ -68,4 +68,4 @@ All `GET`. Query: `range=24h|7d|30d|90d` (default 7d), `site=<site id>|all`, `ai
 | `/api/recent?limit=50` | latest visits (max 200) |
 | `/api/export.csv`, `/api/export.json` | up to 10,000 visits; CSV cells starting with `= + - @` are prefixed with `'` |
 
-`GET /api/health` returns `{"ok":true}` without auth.
+`GET /api/health` needs no auth. It runs a real D1 query and returns `{"ok":true,"db":true,"rangesAgeHours":3}` (`rangesAgeHours` is how long ago the vendor IP ranges were refreshed, `null` before the first cron run), or `503 {"ok":false,"db":false}` when the database is unreachable. Point an uptime monitor at it and alert on non-200; a `rangesAgeHours` above 48 means the daily cron is failing.
