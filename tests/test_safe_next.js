@@ -22,5 +22,14 @@ test("rejects every way of leaving the site", () => {
     "//evil.com", "/\\evil.com", "\\\\evil.com", "\\/evil.com", "/\\/evil.com", "/%5Cevil.com",
     "https://evil.com", "http://evil.com/x", "javascript:alert(1)", "evil.com", "/\tevil.com", "/\nevil.com",
     "/\r/evil.com", "/\u0000evil.com", " //evil.com", "/ /evil.com",
+    // dot segments that normalise into a protocol-relative path
+    "/.//evil.com", "/a/..//evil.com", "/././/evil.com", "/..//evil.com", "/%2e//evil.com", "/.%2e//evil.com", "/a/%2e%2e//evil.com",
   ]) assert.strictEqual(run(bad), "/app/", JSON.stringify(bad));
+});
+test("the result is always a single-slash path on this site", () => {
+  for (const v of ["/a/../b", "/./c?x=1", "/app/../app/", "/a//b"]) {
+    const out = run(v);
+    assert.ok(out.startsWith("/") && !out.startsWith("//"), `${v} -> ${out}`);
+    assert.strictEqual(new URL(out, ORIGIN).origin, ORIGIN);
+  }
 });

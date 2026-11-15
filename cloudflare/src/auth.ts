@@ -104,8 +104,10 @@ async function login(request: Request, env: Env): Promise<Response> {
   const password = typeof body?.password === "string" ? body.password : "";
   const ipKey = hourKey("login-ip", ip(request)), acctKey = hourKey("login-acct", email);
   // Count the attempt before checking the password. Counting only after a failure lets parallel guesses all pass the check.
-  const [ipTries, acctTries] = await Promise.all([hit(env, ipKey), hit(env, acctKey)]);
-  if (ipTries > LIMITS.loginFailPerIp || acctTries > LIMITS.loginFailPerAccount) return json({ error: "too_many_attempts" }, 429);
+  // The IP is counted first and a blocked IP stops here: its requests must not touch the account counter, or one
+  // source could spend the account's whole allowance and lock the owner out.
+  if ((await hit(env, ipKey)) > LIMITS.loginFailPerIp) return json({ error: "too_many_attempts" }, 429);
+  if ((await hit(env, acctKey)) > LIMITS.loginFailPerAccount) return json({ error: "too_many_attempts" }, 429);
   const user = await env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email).first<{ id: number; password_hash: string }>();
   const ok = password.length > 0 && password.length <= 128 && (await hasher(env).verify(password, user?.password_hash ?? DUMMY_HASH)) && !!user;
   if (!ok || !user) return json({ error: "invalid_credentials" }, 401);

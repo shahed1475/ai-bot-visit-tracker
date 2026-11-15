@@ -71,7 +71,7 @@ describe("login and logout", () => {
     let acct = 0;
     for (let i = 0; i < 101; i++) acct = (await call("/api/auth/login", { json: { email: "b@example.com", password: "wrong password!" } })).status;
     expect(acct).toBe(429);
-  });
+  }, 30_000); // 100+ sequential password checks: slow when the whole suite runs in parallel
   it("counts failures atomically, so parallel guesses cannot exceed the per-IP limit", async () => {
     await signup("race@example.com");
     const statuses = await Promise.all(Array.from({ length: 30 }, () =>
@@ -83,6 +83,23 @@ describe("login and logout", () => {
     await signup("victim@example.com");
     for (let i = 0; i < 25; i++) await call("/api/auth/login", { json: { email: "victim@example.com", password: "wrong password!" } });
     const ok = await call("/api/auth/login", { json: { email: "victim@example.com", password: PW } });
+    expect(ok.status).toBe(200);
+  });
+  it("successful logins never refund failures, so they cannot be used to stretch the per-IP limit", async () => {
+    await signup("mine@example.com");
+    const ip = "5.5.5.5";
+    const guess = () => call("/api/auth/login", { json: { email: "someone-else@example.com", password: "wrong password!" }, ip }).then((r) => r.status);
+    const mine = () => call("/api/auth/login", { json: { email: "mine@example.com", password: PW }, ip }).then((r) => r.status);
+    for (let i = 0; i < 9; i++) expect(await guess()).toBe(401);
+    for (let i = 0; i < 5; i++) expect(await mine()).toBe(200); // successes in between
+    expect(await guess()).toBe(401); // the 10th failure is still allowed
+    expect(await guess()).toBe(429); // the 11th is refused: nine successes' worth of refunds did not happen
+    expect(await mine()).toBe(429);
+  });
+  it("requests blocked by the IP limit do not count against the account, so one IP cannot lock the owner out", async () => {
+    await signup("owner@example.com");
+    for (let i = 0; i < 150; i++) await call("/api/auth/login", { json: { email: "owner@example.com", password: "wrong password!" }, ip: "4.4.4.4" });
+    const ok = await call("/api/auth/login", { json: { email: "owner@example.com", password: PW }, ip: "4.4.4.5" });
     expect(ok.status).toBe(200);
   });
   it("a successful login does not use up the failure allowance", async () => {

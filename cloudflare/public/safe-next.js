@@ -9,5 +9,10 @@ export function safeNext(value, origin) {
   let u;
   try { u = new URL(value, origin); } catch { return fallback; }
   if (u.origin !== origin) return fallback;
-  return u.pathname + u.search + u.hash;
+  // Check what we are about to return, not just what came in: "/.//evil.com" normalises to the path "//evil.com",
+  // which location.assign() would read as another site.
+  const out = u.pathname + u.search + u.hash;
+  if (!out.startsWith("/") || out.startsWith("//") || out.includes("\\")) return fallback;
+  if (new URL(out, origin).origin !== origin) return fallback;
+  return out;
 }
