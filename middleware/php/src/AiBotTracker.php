@@ -5,6 +5,7 @@ namespace AiBotTracker;
 use AiBotTracker\BotDetector;
 use AiBotTracker\RequestClassifier;
 use AiBotTracker\DatabaseManager;
+use AiBotTracker\Reporter;
 
 /**
  * AiBotTracker - Main class for AI bot visit tracking
@@ -25,6 +26,11 @@ class AiBotTracker
      * @var DatabaseManager Database manager instance
      */
     private $databaseManager;
+
+    /**
+     * @var Reporter|null Sends bot visits to the Cloudflare tracker (config 'report')
+     */
+    private $reporter;
 
     /**
      * @var array Configuration
@@ -53,18 +59,24 @@ class AiBotTracker
      */
     public function __construct(array $config = [])
     {
-        $this->config = array_merge([
-            // Database configuration
+        // A deep merge: passing only some keys of a section (for example logging.enabled) keeps the defaults of the rest.
+        $this->config = array_replace_recursive([
+            // Database configuration. Use 'database' => false to only report to the tracker and store nothing locally.
             'database' => [
                 'type' => 'sqlite',
                 'database' => 'ai_bot_tracker.db'
             ],
             
+            // Report visits to the Cloudflare tracker: ['endpoint' => 'https://...workers.dev', 'key' => 'abt_...', 'site' => 'example.com']
+            'report' => null,
+
             // Bot detection configuration
             'bot_detection' => [
                 'custom_patterns' => [],
-                'custom_ip_ranges' => [],
-                'detection_methods' => ['user_agent', 'ip_range']
+                'ip_ranges' => [],          // bot id => CIDR list, enables verified/unverified
+                'registry_path' => null,    // default: ../../../signatures/ai-bots.json or env AI_BOT_REGISTRY
+                'trust_proxy_headers' => false,      // true: believe X-Forwarded-For & co (only behind your own proxy)
+                'trust_cloudflare_headers' => false  // true: believe CF-Connecting-IP (only behind Cloudflare)
             ],
             
             // Classification configuration
@@ -105,14 +117,27 @@ class AiBotTracker
      */
     private function initialize(): void
     {
-        // Initialize database manager
-        $this->databaseManager = new DatabaseManager($this->config['database']);
-        $this->databaseManager->initializeSchema();
+        // Initialize database manager (skipped in report-only mode)
+        if (is_array($this->config['database'])) {
+            $this->databaseManager = new DatabaseManager($this->config['database']);
+            $this->databaseManager->initializeSchema();
+        }
+
+        // PHP builds this object on every request, so a mistake in the report settings (for example an unset environment
+        // variable) must not take the page down: reporting is switched off and the mistake is logged as a warning.
+        if (!empty($this->config['report'])) {
+            try {
+                $this->reporter = new Reporter($this->config['report']);
+            } catch (\InvalidArgumentException $e) {
+                trigger_error('AiBotTracker: reporting disabled: ' . $e->getMessage(), E_USER_WARNING);
+            }
+        }
 
         // Initialize bot detector
         $this->botDetector = new BotDetector(
             $this->config['bot_detection']['custom_patterns'] ?? [],
-            $this->config['bot_detection']['custom_ip_ranges'] ?? []
+            $this->config['bot_detection']['ip_ranges'] ?? [],
+            $this->config['bot_detection']['registry_path'] ?? null
         );
 
         // Initialize request classifier
@@ -152,30 +177,34 @@ class AiBotTracker
             $requestData['ip_address'] ?? ''
         );
 
-        if (!$botInfo) {
+        if (empty($botInfo['is_bot'])) {
             return null;
         }
 
-        // Classify request
-        $classification = $this->requestClassifier->classifyRequest(
-            $requestData['url'] ?? '',
-            $requestData['headers'] ?? [],
-            $requestData['user_agent'] ?? '',
-            $requestData['referer'] ?? '',
-            $requestData['method'] ?? 'GET'
-        );
+        // Vendors declare why they crawl in the user agent; trust that over heuristics.
+        if (in_array($botInfo['purpose'], ['training', 'indexing', 'retrieval'], true)) {
+            $classification = ['type' => $botInfo['purpose'], 'confidence' => 0.95,
+                'reasons' => ['Declared purpose of ' . $botInfo['bot_name']]];
+        } else {
+            $classification = $this->requestClassifier->classifyRequest(array_merge($requestData, ['bot_name' => $botInfo['bot_name']]));
+        }
 
         // Prepare visit data
         $visitData = array_merge($requestData, [
-            'bot_name' => $botInfo['name'],
+            'bot_name' => $botInfo['bot_name'],
             'classification' => $classification['type'],
             'confidence' => $classification['confidence'],
             'detection_method' => $botInfo['detection_method'],
             'timestamp' => date('Y-m-d H:i:s')
         ]);
 
+        // Report to the Cloudflare tracker (independent of local logging; sent after the response, never throws)
+        if ($this->reporter) {
+            $this->reportVisit($requestData);
+        }
+
         // Log visit
-        if ($this->config['logging']['enabled']) {
+        if ($this->config['logging']['enabled'] && $this->databaseManager) {
             if ($this->config['logging']['async']) {
                 $this->logVisitAsync($visitData);
             } else {
@@ -187,6 +216,33 @@ class AiBotTracker
             'classification' => $classification,
             'visit_data' => $visitData
         ]);
+    }
+
+    /** Queue the visit for the tracker: path and referer without query strings, no headers, no cookies. */
+    private function reportVisit(array $requestData): void
+    {
+        try {
+            $path = parse_url((string) ($requestData['url'] ?? '/'), PHP_URL_PATH);
+            $event = [
+                'ip' => (string) ($requestData['ip_address'] ?? ''),
+                'ua' => (string) ($requestData['user_agent'] ?? ''),
+                'path' => is_string($path) && $path !== '' ? $path : '/',
+                'method' => (string) ($requestData['method'] ?? 'GET'),
+            ];
+            $referer = preg_split('/[?#]/', (string) ($requestData['referer'] ?? ''))[0];
+            if ($referer !== '') {
+                $event['referer'] = $referer;
+            }
+            $this->reporter->add($event);
+        } catch (\Throwable $e) {
+            // reporting must never break a page
+        }
+    }
+
+    /** Send queued reports now. They are also sent automatically when the script ends. @return bool true if accepted */
+    public function flushReports(): bool
+    {
+        return $this->reporter ? $this->reporter->flush() : true;
     }
 
     /**
@@ -224,6 +280,17 @@ class AiBotTracker
             'HTTP_FORWARDED',            // Proxy
             'REMOTE_ADDR'                // Standard
         ];
+
+        // Forwarded headers are client-controlled unless they come from your own proxy: trust only when configured.
+        $trust = $this->config['bot_detection'];
+        if (!empty($trust['trust_proxy_headers'])) {
+            $trusted = $headers;
+        } elseif (!empty($trust['trust_cloudflare_headers'])) {
+            $trusted = ['HTTP_CF_CONNECTING_IP', 'REMOTE_ADDR'];
+        } else {
+            $trusted = ['REMOTE_ADDR'];
+        }
+        $headers = $trusted;
 
         foreach ($headers as $header) {
             if (!empty($_SERVER[$header])) {
@@ -284,11 +351,11 @@ class AiBotTracker
     public function logVisit(array $visitData): int
     {
         // Add response time if enabled
-        if ($this->config['logging']['log_response_time']) {
+        if (($this->config['logging']['log_response_time'] ?? true)) {
             $visitData['response_time'] = microtime(true) - $this->requestStartTime;
         }
 
-        return $this->databaseManager->logVisit($visitData);
+        return $this->databaseManager ? $this->databaseManager->logVisit($visitData) : 0;
     }
 
     /**
@@ -328,7 +395,7 @@ class AiBotTracker
             throw new \RuntimeException('Statistics feature is disabled');
         }
 
-        return $this->databaseManager->getStats($timeRange, $botName);
+        return $this->databaseManager ? $this->databaseManager->getStats($timeRange, $botName) : [];
     }
 
     /**
@@ -346,7 +413,7 @@ class AiBotTracker
             throw new \RuntimeException('Export feature is disabled');
         }
 
-        return $this->databaseManager->exportToCsv($filePath, $timeRange, $botName, $classification);
+        return $this->databaseManager ? $this->databaseManager->exportToCsv($filePath, $timeRange, $botName, $classification) : 0;
     }
 
     /**
@@ -364,7 +431,7 @@ class AiBotTracker
             throw new \RuntimeException('Export feature is disabled');
         }
 
-        return $this->databaseManager->exportToJson($filePath, $timeRange, $botName, $classification);
+        return $this->databaseManager ? $this->databaseManager->exportToJson($filePath, $timeRange, $botName, $classification) : 0;
     }
 
     /**
@@ -380,7 +447,7 @@ class AiBotTracker
         }
 
         $daysToKeep = $daysToKeep ?? $this->config['performance']['days_to_keep'];
-        return $this->databaseManager->cleanupOldVisits($daysToKeep);
+        return $this->databaseManager ? $this->databaseManager->cleanupOldVisits($daysToKeep) : 0;
     }
 
     /**
@@ -452,9 +519,9 @@ class AiBotTracker
     /**
      * Get database manager instance
      * 
-     * @return DatabaseManager Database manager instance
+     * @return DatabaseManager|null Database manager instance (null in report-only mode)
      */
-    public function getDatabaseManager(): DatabaseManager
+    public function getDatabaseManager(): ?DatabaseManager
     {
         return $this->databaseManager;
     }

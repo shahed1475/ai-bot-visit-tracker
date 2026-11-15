@@ -1,0 +1,337 @@
+{
+ "version": 1,
+ "cases": [
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.4; +https://openai.com/searchbot",
+   "expect": {
+    "id": "oai-searchbot",
+    "kind": "ai",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-AdsBot/1.0; +https://openai.com/adsbot",
+   "expect": {
+    "id": "oai-adsbot",
+    "kind": "ai",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ChatGPT-User/1.0; +https://openai.com/bot",
+   "expect": {
+    "id": "chatgpt-user",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.4; +https://openai.com/gptbot",
+   "expect": {
+    "id": "gptbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-SearchBot/1.0; +Claude-SearchBot@anthropic.com)",
+   "expect": {
+    "id": "claude-searchbot",
+    "kind": "ai",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Claude-User/1.0; +Claude-User@anthropic.com)",
+   "expect": {
+    "id": "claude-user",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+   "expect": {
+    "id": "claudebot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; anthropic-ai/1.0)",
+   "expect": {
+    "id": "anthropic-ai",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)",
+   "expect": {
+    "id": "perplexity-user",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+   "expect": {
+    "id": "perplexitybot",
+    "kind": "ai",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Google-CloudVertexBot; +https://cloud.google.com)",
+   "expect": {
+    "id": "google-cloudvertexbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; GoogleOther)",
+   "expect": {
+    "id": "googleother",
+    "kind": "ai",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (Linux; Android 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Bytespider; spider-feedback@bytedance.com)",
+   "expect": {
+    "id": "bytespider",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "CCBot/2.0 (https://commoncrawl.org/faq/)",
+   "expect": {
+    "id": "ccbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "meta-externalfetcher/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)",
+   "expect": {
+    "id": "meta-externalfetcher",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "meta-externalagent/1.1 (+https://developers.facebook.com/docs/sharing/webmasters/crawler)",
+   "expect": {
+    "id": "meta-externalagent",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; FacebookBot/1.0; +https://developers.facebook.com/docs/sharing/webmasters/facebook-bot)",
+   "expect": {
+    "id": "facebookbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/600.2.5 (KHTML, like Gecko) Version/8.0.2 Safari/600.2.5 (Amazonbot/0.1; +https://developer.amazon.com/support/amazonbot)",
+   "expect": {
+    "id": "amazonbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1.1 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)",
+   "expect": {
+    "id": "applebot",
+    "kind": "ai",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; DuckAssistBot/1.2; +https://duckduckgo.com/duckassistbot/)",
+   "expect": {
+    "id": "duckassistbot",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; MistralAI-User/1.0; +https://docs.mistral.ai/robots)",
+   "expect": {
+    "id": "mistralai-user",
+    "kind": "ai",
+    "purpose": "retrieval"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; cohere-training-data-crawler/1.0)",
+   "expect": {
+    "id": "cohere",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; YouBot/1.0; +https://about.you.com/youbot/)",
+   "expect": {
+    "id": "youbot",
+    "kind": "ai",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Diffbot/0.1; +http://www.diffbot.com)",
+   "expect": {
+    "id": "diffbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; ImagesiftBot; +imagesift.com)",
+   "expect": {
+    "id": "imagesiftbot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; omgilibot/0.4; +http://omgili.com)",
+   "expect": {
+    "id": "omgili",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Ai2Bot-Dolma; +https://allenai.org/crawler)",
+   "expect": {
+    "id": "ai2bot",
+    "kind": "ai",
+    "purpose": "training"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+   "expect": {
+    "id": "googlebot",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+   "expect": {
+    "id": "bingbot",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "DuckDuckBot/1.1; (+http://duckduckgo.com/duckduckbot.html)",
+   "expect": {
+    "id": "duckduckbot",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+   "expect": {
+    "id": "yandexbot",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Baiduspider/2.0; +http://www.baidu.com/search/spider.html)",
+   "expect": {
+    "id": "baiduspider",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; PetalBot;+https://webmaster.petalsearch.com/site/petalbot)",
+   "expect": {
+    "id": "petalbot",
+    "kind": "search",
+    "purpose": "indexing"
+   }
+  },
+  {
+   "ua": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+   "expect": {
+    "id": "facebookexternalhit",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Twitterbot/1.0",
+   "expect": {
+    "id": "twitterbot",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com)",
+   "expect": {
+    "id": "linkedinbot",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+   "expect": {
+    "id": "slackbot",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)",
+   "expect": {
+    "id": "discordbot",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "TelegramBot (like TwitterBot)",
+   "expect": {
+    "id": "telegrambot",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "WhatsApp/2.23.20.0 A",
+   "expect": {
+    "id": "whatsapp",
+    "kind": "social",
+    "purpose": "unknown"
+   }
+  },
+  {
+   "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+   "expect": null
+  },
+  {
+   "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) LinkedInApp/9.0",
+   "expect": null
+  },
+  {
+   "ua": "",
+   "expect": null
+  }
+ ]
+}

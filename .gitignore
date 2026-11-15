@@ -86,3 +86,9 @@ composer.lock
 # Temporary files
 tmp/
 temp/
+# Tooling and local state
+.playwright-mcp/
+.superpowers/
+.wrangler/
+.dev.vars
+data/

@@ -11,6 +11,7 @@ class BotVisit(models.Model):
     """Model to store bot visit information"""
     
     CLASSIFICATION_CHOICES = [
+        ('training', 'Training'),
         ('indexing', 'Indexing'),
         ('retrieval', 'Retrieval'),
         ('unknown', 'Unknown'),

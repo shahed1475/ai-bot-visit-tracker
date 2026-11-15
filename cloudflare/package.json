@@ -1,0 +1,24 @@
+{
+  "name": "ai-bot-tracker-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "migrate:local": "wrangler d1 migrations apply ai-bot-tracker --local",
+    "migrate:remote": "wrangler d1 migrations apply ai-bot-tracker --remote",
+    "seed": "node scripts/seed.mjs",
+    "build:sensor": "wrangler deploy --dry-run -c sensor/wrangler.jsonc --outdir .sensor-build && cp sensor/.sensor-build/index.js public/downloads/edge-sensor.js",
+    "admin": "node scripts/admin.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.162.0"
+  }
+}

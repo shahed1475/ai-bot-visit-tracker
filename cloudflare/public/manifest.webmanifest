@@ -1,0 +1,55 @@
+{
+  "id": "/app/",
+  "name": "AI Bot Tracker",
+  "short_name": "Bot Tracker",
+  "description": "See which AI crawlers read your website, why they came, and which pages they took.",
+  "start_url": "/app/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "background_color": "#eef1f4",
+  "theme_color": "#eef1f4",
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Last 24 hours",
+      "short_name": "24 hours",
+      "url": "/app/#range=24h"
+    },
+    {
+      "name": "Last 7 days",
+      "short_name": "7 days",
+      "url": "/app/#range=7d"
+    },
+    {
+      "name": "Latest visits",
+      "short_name": "Live feed",
+      "url": "/app/#feed"
+    }
+  ]
+}

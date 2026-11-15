@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1217" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Bot Tracker">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Dashboard | AI Bot Tracker</title>
+  <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/app/app.css">
+  <link rel="stylesheet" href="/site.css">
+  <script type="module" src="/app/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+
+  <div id="app" hidden>
+    <header class="bar-wrap">
+      <div class="bar">
+        <a class="brand" href="/" aria-label="AI Bot Tracker home"><img src="/brand/mark.svg" alt="" width="24" height="24"> AI Bot Tracker</a>
+        <button type="button" class="btn" id="refresh">Refresh</button>
+        <button type="button" class="btn menu-btn" id="menu-btn" aria-expanded="false" aria-controls="more">More</button>
+        <div class="filters">
+          <div class="seg" role="group" aria-label="Time range" id="ranges">
+            <button type="button" data-range="24h">24h</button>
+            <button type="button" data-range="7d">7d</button>
+            <button type="button" data-range="30d">30d</button>
+            <button type="button" data-range="90d">90d</button>
+          </div>
+          <label class="field"><span class="sr">Site</span>
+            <select id="site" aria-label="Site"><option value="all">All sites</option></select>
+          </label>
+          <label class="check"><input type="checkbox" id="ai-only" checked> AI bots only</label>
+        </div>
+        <div class="more" id="more">
+          <span class="export">Export <a id="export-csv" href="/api/export.csv">CSV</a> <a id="export-json" href="/api/export.json">JSON</a></span>
+          <button type="button" class="btn" id="theme" aria-label="Change theme">Theme: auto</button>
+          <button type="button" class="btn" id="install" hidden>Install app</button>
+          <p class="muted small ios-hint" id="ios-hint" hidden>To install on iPhone: tap Share, then Add to Home Screen.</p>
+          <a class="btn" id="settings" href="/app/settings/">Sites and account</a>
+          <button type="button" class="btn" id="logout">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <p id="demo-banner" class="banner" role="note" hidden>This is a demo with sample data. <a href="/signup">Create a free account</a> to see your own sites.</p>
+      <p id="offline" class="banner" role="status" hidden>You are offline. The dashboard will refresh when you reconnect.</p>
+      <p id="banner" class="banner" role="status" hidden></p>
+      <section id="kpis" class="panel kpis" aria-label="Summary"></section>
+
+      <section id="setup" class="panel setup" hidden></section>
+
+      <div id="grid" class="grid">
+        <article class="panel span-8">
+          <div class="panel-head"><h2>Visits over time</h2><ul class="legend" id="legend"></ul></div>
+          <div id="trend" class="chart"></div>
+          <details class="table-view"><summary>View as table</summary><div id="trend-table"></div></details>
+        </article>
+        <article class="panel span-4">
+          <div class="panel-head"><h2>Why they came</h2></div>
+          <div id="why"></div>
+        </article>
+        <article class="panel span-5" id="p-bots">
+          <div class="panel-head"><h2>Who is visiting</h2></div>
+          <div id="bots"></div>
+        </article>
+        <article class="panel span-7" id="p-pages">
+          <div class="panel-head"><h2>What they read</h2></div>
+          <div id="pages"></div>
+        </article>
+        <article class="panel span-5">
+          <div class="panel-head"><h2>When they come</h2><span class="muted small">UTC, by weekday and hour</span></div>
+          <div id="heat" class="chart"></div>
+        </article>
+        <article class="panel span-7" id="p-feed">
+          <div class="panel-head"><h2>Latest visits</h2></div>
+          <div id="feed"></div>
+        </article>
+      </div>
+      <p class="foot muted small">All times are UTC. <span id="updated"></span></p>
+    </main>
+
+    <nav class="tabbar" aria-label="Sections">
+      <a href="#kpis" aria-current="true">Overview</a>
+      <a href="#p-bots">Bots</a>
+      <a href="#p-pages">Pages</a>
+      <a href="#p-feed">Live</a>
+    </nav>
+  </div>
+</body>
+</html>

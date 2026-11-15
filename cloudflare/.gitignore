@@ -1,0 +1,7 @@
+node_modules
+.wrangler
+.dev.vars
+.prod.vars
+.sensor-build
+sensor/.sensor-build
+worker-configuration.d.ts

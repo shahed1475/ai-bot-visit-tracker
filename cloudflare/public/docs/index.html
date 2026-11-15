@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1217" media="(prefers-color-scheme: dark)">
+  <title>Setup guide | AI Bot Tracker</title>
+  <meta name="description" content="Connect a site to AI Bot Tracker with the edge sensor, Node, Flask, Django, PHP or one HTTPS call.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/app/app.css">
+  <link rel="stylesheet" href="/site.css">
+  <script src="/theme.js"></script>
+  <script type="module" src="/site.js"></script>
+</head>
+<body class="pub">
+  <header class="wrap"><nav class="nav" aria-label="Main">
+    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
+    <a href="/demo/">Demo</a><a href="/docs/">Docs</a>
+    <a href="/login" class="js-signin">Sign in</a>
+    <a class="btn primary link-btn js-cta" href="/signup">Create account</a>
+  </nav></header>
+  <main id="main" class="wrap"><article class="prose">
+    <h1>Setup guide</h1>
+    <p>Connect a site in three steps: create a site and copy its key, send visits with the edge sensor or your server code, then check the dashboard.</p>
+    <nav class="docs-nav" aria-label="On this page"><a href="#key">Get a key</a><a href="#sensor">Edge sensor</a><a href="#node">Node</a><a href="#flask">Flask</a><a href="#django">Django</a><a href="#php">PHP</a><a href="#http">HTTPS</a><a href="#check">Check it works</a><a href="#read">Read your stats</a></nav>
+
+    <h2 id="key">1. Get a site key</h2>
+    <p><a href="/signup">Create an account</a>, open <a href="/app/settings/">Sites and account</a>, enter your hostname (for example <code>example.com</code>) and choose Add site. Copy the key that appears. It is shown only once, and you can rotate it later. Need a separate key for another server? Create more under API keys on the same page, and revoke any of them on its own.</p>
+
+    <h2 id="sensor">2a. Edge sensor (sites on Cloudflare)</h2>
+    <p>No code changes. The sensor runs in front of your site, passes every request through, and reports only bot visits.</p>
+    <ol>
+      <li>In the Cloudflare dashboard open Workers and Pages, then Create, then Create Worker.</li>
+      <li>Replace the code with the contents of <a href="/downloads/edge-sensor.js" download>edge-sensor.js</a>, then deploy.</li>
+      <li>In the Worker's Settings, Variables, add the text variable <code>TRACKER_URL</code> with the value <code class="js-origin">https://your-tracker.example</code> and the secret <code>TRACKER_KEY</code> with your site key.</li>
+      <li>Under Domains and Routes add the route <code>example.com/*</code> for your zone. Set the failure mode to fail open so your site keeps loading if the Worker is ever unavailable.</li>
+    </ol>
+
+    <h2 id="node">2b. Node.js (Express)</h2>
+    <pre class="code" tabindex="0">const { AiBotTracker } = require(&#x27;./middleware/nodejs&#x27;);
+
+app.use(new AiBotTracker({
+  database: false, // or { type: &#x27;sqlite&#x27;, path: &#x27;./data/bot_visits.db&#x27; } to also keep a local copy
+  report: { endpoint: &#x27;https://your-tracker.example&#x27;, key: process.env.TRACKER_KEY, site: &#x27;example.com&#x27; },
+}).middleware());</pre>
+    <p>Copy the <code>middleware/nodejs</code>, <code>core</code> and <code>signatures</code> folders from the project together.</p>
+
+    <h2 id="flask">2c. Flask</h2>
+    <pre class="code" tabindex="0">from ai_bot_tracker_flask import AiBotTrackerFlask
+
+AiBotTrackerFlask(app, {
+    &quot;database&quot;: False,
+    &quot;report&quot;: {&quot;endpoint&quot;: &quot;https://your-tracker.example&quot;, &quot;key&quot;: os.environ[&quot;TRACKER_KEY&quot;], &quot;site&quot;: &quot;example.com&quot;},
+})</pre>
+    <h2 id="django">2d. Django</h2>
+    <pre class="code" tabindex="0">MIDDLEWARE = [&quot;ai_bot_tracker_django.AiBotTrackerMiddleware&quot;, ...]
+AI_BOT_TRACKER = {
+    &quot;database&quot;: False,
+    &quot;report&quot;: {&quot;endpoint&quot;: &quot;https://your-tracker.example&quot;, &quot;key&quot;: os.environ[&quot;TRACKER_KEY&quot;], &quot;site&quot;: &quot;example.com&quot;},
+}</pre>
+    <h2 id="php">2e. PHP</h2>
+    <p>The PHP middleware reports bot visits for you. People are ignored, and a tracker that is down never breaks your page.</p>
+    <pre class="code" tabindex="0">$tracker = new AiBotTracker\AiBotTracker([
+    &#x27;database&#x27; =&gt; false,   // report only
+    &#x27;report&#x27; =&gt; [&#x27;endpoint&#x27; =&gt; &#x27;https://your-tracker.example&#x27;, &#x27;key&#x27; =&gt; getenv(&#x27;TRACKER_KEY&#x27;), &#x27;site&#x27; =&gt; &#x27;example.com&#x27;],
+]);
+$tracker-&gt;processRequest();</pre>
+    <h2 id="http">2f. Any language: one HTTPS call</h2>
+    <p>Send a POST for each request, or up to 100 events at a time in <code>{"events": [...]}</code>. The key decides which site the visit belongs to. People are ignored, so you can send every request.</p>
+    <pre class="code" tabindex="0">curl -X POST https://your-tracker.example/api/ingest \
+  -H &quot;Authorization: Bearer abt_your_site_key&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;ip&quot;:&quot;132.196.86.5&quot;,&quot;ua&quot;:&quot;Mozilla/5.0; compatible; GPTBot/1.4&quot;,&quot;path&quot;:&quot;/pricing&quot;,&quot;status&quot;:200}&#x27;</pre>
+    <p>Fields: <code>ua</code> and <code>path</code> are required. Optional: <code>ip</code>, <code>method</code>, <code>status</code>, <code>referer</code>, <code>country</code>, <code>asn</code>, <code>asOrg</code>, <code>ts</code> (unix seconds).</p>
+
+    <h2 id="check">3. Check it works</h2>
+    <p>Send the curl command above with your key, then open the <a href="/app/">dashboard</a>. A GPTBot visit appears under Training within a few seconds. If you get <code>401</code>, the key is wrong, was rotated or was revoked.</p>
+
+    <h2 id="read">4. Read your stats from a script</h2>
+    <p>Under API keys on the <a href="/app/settings/">Sites and account</a> page, create a <strong>read key</strong> for all your sites or for one. It can read the same numbers as the dashboard, and nothing else: it cannot send visits, change keys or open your account.</p>
+    <pre class="code" tabindex="0">curl -H &quot;Authorization: Bearer abtr_your_read_key&quot; \
+  &quot;https://your-tracker.example/api/v1/summary?range=7d&quot;</pre>
+    <p>Other endpoints: <code>timeseries</code>, <code>bots</code>, <code>pages</code>, <code>heatmap</code>, <code>recent</code>, <code>export.csv</code>, <code>export.json</code> and <code>sites</code>. Add <code>?range=24h|7d|30d|90d</code>, <code>&amp;site=ID</code> or <code>&amp;ai=0</code> to include search and social crawlers. Keep read keys out of web pages and public repositories; anyone who has one can read your stats until you revoke it.</p>
+  </article></main>
+  <footer class="wrap foot-site">
+    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="32" height="32"> <span>AI Bot Tracker</span></a>
+    <a href="/demo/">Demo</a><a href="/docs/">Docs</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/login">Sign in</a>
+  </footer>
+</body>
+</html>

@@ -16,6 +16,11 @@ from typing import Dict, List, Optional, Union, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+try:
+    from core import signatures
+except ImportError:  # imported without the project root on sys.path
+    import signatures
+
 
 @dataclass
 class BotInfo:
@@ -25,6 +30,19 @@ class BotInfo:
     confidence: float
     patterns_matched: List[str]
     additional_info: Dict[str, Any] = None
+    bot_id: Optional[str] = None
+    kind: Optional[str] = None  # 'ai' | 'search' | 'social' | 'other'
+    purpose: Optional[str] = None  # 'training' | 'indexing' | 'retrieval' | 'unknown'
+    verified: str = 'unknown'  # 'verified' | 'unverified' | 'unknown'
+
+    # The Flask/Django middleware read results like a dict (bot_info['name']).
+    def __getitem__(self, key: str) -> Any:
+        if key in self.__dataclass_fields__:
+            return getattr(self, key)
+        raise KeyError(key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return getattr(self, key, default) if key in self.__dataclass_fields__ else default
 
 
 class BotDetector:
@@ -51,330 +69,39 @@ class BotDetector:
             self.add_custom_bot(bot)
     
     def _initialize_bot_patterns(self) -> Dict[str, Dict]:
-        """Initialize known bot patterns"""
-        return {
-            # AI/LLM Bots
-            'gptbot': {
-                'patterns': [
-                    r'gptbot',
-                    r'chatgpt-user',
-                    r'openai',
-                    r'gpt-3',
-                    r'gpt-4'
-                ],
-                'type': 'retrieval',
-                'confidence': 0.95,
-                'description': 'OpenAI GPT Bot'
-            },
-            'claudebot': {
-                'patterns': [
-                    r'claudebot',
-                    r'claude-web',
-                    r'anthropic'
-                ],
-                'type': 'retrieval',
-                'confidence': 0.95,
-                'description': 'Anthropic Claude Bot'
-            },
-            'perplexitybot': {
-                'patterns': [
-                    r'perplexitybot',
-                    r'perplexity'
-                ],
-                'type': 'retrieval',
-                'confidence': 0.95,
-                'description': 'Perplexity AI Bot'
-            },
-            'bardbot': {
-                'patterns': [
-                    r'bardbot',
-                    r'bard',
-                    r'google-bard'
-                ],
-                'type': 'retrieval',
-                'confidence': 0.95,
-                'description': 'Google Bard Bot'
-            },
-            
-            # Search Engine Bots
-            'googlebot': {
-                'patterns': [
-                    r'googlebot',
-                    r'google',
-                    r'adsbot-google'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'Google Search Bot'
-            },
-            'bingbot': {
-                'patterns': [
-                    r'bingbot',
-                    r'msnbot',
-                    r'bing'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'Microsoft Bing Bot'
-            },
-            'yahoobot': {
-                'patterns': [
-                    r'slurp',
-                    r'yahoo'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'Yahoo Search Bot'
-            },
-            'duckduckbot': {
-                'patterns': [
-                    r'duckduckbot',
-                    r'duckduckgo'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'DuckDuckGo Bot'
-            },
-            'baidubot': {
-                'patterns': [
-                    r'baiduspider',
-                    r'baidu'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'Baidu Search Bot'
-            },
-            'yandexbot': {
-                'patterns': [
-                    r'yandexbot',
-                    r'yandex'
-                ],
-                'type': 'indexing',
-                'confidence': 0.9,
-                'description': 'Yandex Search Bot'
-            },
-            
-            # Social Media Bots
-            'facebookbot': {
-                'patterns': [
-                    r'facebookexternalhit',
-                    r'facebook'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Facebook Bot'
-            },
-            'twitterbot': {
-                'patterns': [
-                    r'twitterbot',
-                    r'twitter'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Twitter Bot'
-            },
-            'linkedinbot': {
-                'patterns': [
-                    r'linkedinbot',
-                    r'linkedin'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'LinkedIn Bot'
-            },
-            'discordbot': {
-                'patterns': [
-                    r'discordbot',
-                    r'discord'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Discord Bot'
-            },
-            'slackbot': {
-                'patterns': [
-                    r'slackbot',
-                    r'slack'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Slack Bot'
-            },
-            
-            # SEO and Analytics Bots
-            'ahrefsbot': {
-                'patterns': [
-                    r'ahrefsbot',
-                    r'ahrefs'
-                ],
-                'type': 'indexing',
-                'confidence': 0.8,
-                'description': 'Ahrefs SEO Bot'
-            },
-            'semrushbot': {
-                'patterns': [
-                    r'semrushbot',
-                    r'semrush'
-                ],
-                'type': 'indexing',
-                'confidence': 0.8,
-                'description': 'SEMrush Bot'
-            },
-            'mozbot': {
-                'patterns': [
-                    r'rogerbot',
-                    r'moz'
-                ],
-                'type': 'indexing',
-                'confidence': 0.8,
-                'description': 'Moz SEO Bot'
-            },
-            
-            # Other Common Bots
-            'applebot': {
-                'patterns': [
-                    r'applebot',
-                    r'apple'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Apple Bot'
-            },
-            'amazonbot': {
-                'patterns': [
-                    r'amazonbot',
-                    r'amazon'
-                ],
-                'type': 'indexing',
-                'confidence': 0.85,
-                'description': 'Amazon Bot'
-            }
-        }
-    
+        """Built-in bots come from the shared registry; this dict only holds custom bots."""
+        return {}
+
     def _initialize_ip_ranges(self) -> Dict[str, List[str]]:
-        """Initialize known IP ranges for major bots"""
-        return {
-            'googlebot': [
-                '66.249.64.0/19',
-                '64.233.160.0/19',
-                '72.14.192.0/18',
-                '209.85.128.0/17',
-                '216.239.32.0/19'
-            ],
-            'bingbot': [
-                '40.77.167.0/24',
-                '157.55.39.0/24',
-                '207.46.13.0/24'
-            ],
-            'facebookbot': [
-                '31.13.24.0/21',
-                '31.13.64.0/18',
-                '66.220.144.0/20',
-                '69.63.176.0/20',
-                '69.171.224.0/19',
-                '74.119.76.0/22',
-                '103.4.96.0/22',
-                '173.252.64.0/18',
-                '204.15.20.0/22'
-            ]
-        }
-    
-    def detect_bot(self, user_agent: str, ip_address: Optional[str] = None, 
+        """bot id -> CIDR list. Fill from the vendor-published lists (see the Cloudflare cron) if you want IP verification."""
+        return {}
+
+    def detect_bot(self, user_agent: str, ip_address: Optional[str] = None,
                    headers: Optional[Dict[str, str]] = None) -> Optional[BotInfo]:
-        """
-        Detect if the request is from a bot
-        
-        Args:
-            user_agent: User agent string
-            ip_address: IP address of the request
-            headers: Additional request headers
-            
-        Returns:
-            BotInfo object if bot detected, None otherwise
-        """
-        if not user_agent:
+        """Return a BotInfo for bot traffic, None for humans/empty user agents."""
+        if not user_agent or not isinstance(user_agent, str):
             return None
-        
-        user_agent_lower = user_agent.lower()
-        
-        # Check against known bot patterns
-        for bot_name, bot_config in self.bot_patterns.items():
-            patterns_matched = []
-            
-            for pattern in bot_config['patterns']:
-                if re.search(pattern, user_agent_lower, re.IGNORECASE):
-                    patterns_matched.append(pattern)
-            
-            if patterns_matched:
-                # Additional validation for IP ranges if available
-                confidence = bot_config['confidence']
-                if ip_address and bot_name in self.ip_ranges:
-                    if self._validate_ip_range(ip_address, self.ip_ranges[bot_name]):
-                        confidence = min(confidence + 0.05, 1.0)
-                    else:
-                        confidence = max(confidence - 0.1, 0.5)
-                
-                return BotInfo(
-                    name=bot_name,
-                    type=bot_config['type'],
-                    confidence=confidence,
-                    patterns_matched=patterns_matched,
-                    additional_info={
-                        'description': bot_config.get('description', ''),
-                        'user_agent': user_agent,
-                        'ip_address': ip_address,
-                        'validated_ip': ip_address and bot_name in self.ip_ranges and 
-                                     self._validate_ip_range(ip_address, self.ip_ranges[bot_name])
-                    }
-                )
-        
-        # Check for generic bot indicators
-        generic_bot_patterns = [
-            r'bot',
-            r'crawler',
-            r'spider',
-            r'scraper',
-            r'fetcher'
-        ]
-        
-        for pattern in generic_bot_patterns:
-            if re.search(pattern, user_agent_lower, re.IGNORECASE):
-                return BotInfo(
-                    name='generic_bot',
-                    type='unknown',
-                    confidence=0.6,
-                    patterns_matched=[pattern],
-                    additional_info={
-                        'description': 'Generic bot detected',
-                        'user_agent': user_agent,
-                        'ip_address': ip_address
-                    }
-                )
-        
-        return None
-    
+        ua = user_agent[:signatures.MAX_UA]
+
+        for bot_name, cfg in self.bot_patterns.items():  # custom bots first
+            hits = [p for p in cfg['patterns'] if re.search(p, ua, re.IGNORECASE)]
+            if hits:
+                return BotInfo(name=bot_name, type=cfg['type'], confidence=cfg['confidence'], patterns_matched=hits,
+                               bot_id=bot_name, kind='ai', purpose=cfg['type'] if cfg['type'] in ('training', 'indexing', 'retrieval') else 'unknown',
+                               additional_info={'description': cfg.get('description', ''), 'user_agent': user_agent, 'ip_address': ip_address})
+
+        bot = signatures.match(ua)
+        if not bot:
+            return None
+        verified = signatures.verify(bot, ip_address, self.ip_ranges)
+        return BotInfo(
+            name=bot['name'], type=bot['purpose'], confidence=0.5 if bot['id'] == 'generic-bot' else 0.95,
+            patterns_matched=[bot['ua']] if bot['ua'] else [], bot_id=bot['id'], kind=bot['kind'], purpose=bot['purpose'], verified=verified,
+            additional_info={'operator': bot['operator'], 'user_agent': user_agent, 'ip_address': ip_address, 'validated_ip': verified == 'verified'})
+
     def _validate_ip_range(self, ip_address: str, ip_ranges: List[str]) -> bool:
-        """
-        Validate if IP address belongs to known ranges
-        
-        Args:
-            ip_address: IP address to validate
-            ip_ranges: List of IP ranges in CIDR notation
-            
-        Returns:
-            True if IP is in any of the ranges
-        """
-        try:
-            ip = ipaddress.ip_address(ip_address)
-            for ip_range in ip_ranges:
-                network = ipaddress.ip_network(ip_range, strict=False)
-                if ip in network:
-                    return True
-        except (ipaddress.AddressValueError, ValueError):
-            pass
-        
-        return False
-    
+        return signatures.in_ranges(ip_address, ip_ranges)
+
     def add_custom_bot(self, bot_config: Dict[str, Any]) -> None:
         """
         Add a custom bot configuration

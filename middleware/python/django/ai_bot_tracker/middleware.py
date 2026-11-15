@@ -101,6 +101,11 @@ class AiBotTrackerMiddleware(MiddlewareMixin):
             method=request.method
         )
         
+        if bot_info.get('purpose') in ('training', 'indexing', 'retrieval'):
+            # Vendors declare why they crawl in the user agent; trust that over heuristics.
+            classification_info = {'classification': bot_info['purpose'], 'confidence': 0.95,
+                                   'reasons': [f"Declared purpose of {bot_info['bot_name']}"]}
+
         request._ai_bot_classification = classification_info
         
         if self.enable_logging and bot_info['is_bot']:
@@ -277,7 +282,7 @@ def setup_ai_bot_tracker(app_config: Dict = None):
         'skip_non_bots': True,
         'async_logging': True,
         'custom_bot_patterns': {
-            'MyBot': [r'MyBot/\d+\.\d+']
+            'MyBot': [r'MyBot/\\d+\\.\\d+']
         },
         'ip_ranges': ['192.168.1.0/24'],
         'classification_rules': {

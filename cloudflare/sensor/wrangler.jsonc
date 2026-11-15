@@ -1,0 +1,16 @@
+{
+  // Edge sensor: runs in front of YOUR site and reports AI-bot visits to your tracker.
+  // Setup: 1) create a site in the tracker and copy its key, 2) set TRACKER_URL below,
+  // 3) set your zone route, 4) `npx wrangler deploy -c sensor/wrangler.jsonc`, then add the TRACKER_KEY secret.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "ai-bot-sensor",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": false,
+  "routes": [
+    // { "pattern": "example.com/*", "zone_name": "example.com" }
+  ],
+  "vars": { "TRACKER_URL": "https://YOUR-TRACKER.workers.dev" },
+  // Add the site key as a secret: npx wrangler secret put TRACKER_KEY -c sensor/wrangler.jsonc
+  "observability": { "enabled": true }
+}
