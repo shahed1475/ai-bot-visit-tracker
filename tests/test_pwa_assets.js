@@ -88,3 +88,26 @@ test('service worker serves the shell network-first and falls back to cache offl
   const nav = evt('https://t.test/some/deep/link', { mode: 'navigate' }); sw.handlers.fetch(nav);
   assert.equal((await nav.responded).body, 'shell', 'offline navigation falls back to the app shell');
 });
+
+test('every rule that starts an animation is switched off by name under prefers-reduced-motion', () => {
+  // Top-level blocks of a stylesheet: [{ head, body }]. Nested at-rules (media, keyframes) keep their body for a second pass.
+  const blocks = (css) => {
+    const out = []; let depth = 0, start = 0, head = '';
+    for (let i = 0; i < css.length; i++) {
+      if (css[i] === '{') { if (depth === 0) { head = css.slice(start, i).trim(); start = i + 1; } depth++; }
+      else if (css[i] === '}') { depth--; if (depth === 0) { out.push({ head, body: css.slice(start, i) }); start = i + 1; } }
+    }
+    return out;
+  };
+  const names = (head) => head.split(',').map((s) => s.replace(/\s+/g, ' ').trim());
+  const animates = (body) => /(^|[;\s])animation(-name)?\s*:\s*(?!none\b)/.test(body);
+  for (const file of ['site.css', 'home.css']) {
+    const css = read(file).replace(/\/\*[\s\S]*?\*\//g, '');
+    const top = blocks(css);
+    const started = top.filter((b) => !b.head.startsWith('@') && animates(b.body)).flatMap((b) => names(b.head));
+    const stopped = new Set(top.filter((b) => /prefers-reduced-motion:\s*reduce/.test(b.head)).flatMap((b) => blocks(b.body))
+      .filter((r) => /animation\s*:\s*none/.test(r.body)).flatMap((r) => names(r.head)));
+    for (const sel of started) assert.ok(stopped.has(sel), `${file}: "${sel}" animates but is not switched off under prefers-reduced-motion (list its exact selector in that block)`);
+    assert.ok(file !== 'site.css' || started.length >= 4, 'the check found the motif animations in site.css');
+  }
+});

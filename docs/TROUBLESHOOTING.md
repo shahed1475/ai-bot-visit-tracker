@@ -1,7 +1,7 @@
 # Troubleshooting
 
 - **A bot visit is missing.** The user agent must match `signatures/ai-bots.json` (or look like a generic crawler). Test: `curl -A "GPTBot/1.4" https://your-site/`.
-- **"IP check: unknown" for everything.** The cron job has not run yet (or the vendor publishes no ranges, e.g. Anthropic). Locally: `curl "localhost:8787/__scheduled?cron=17+3+*+*+*"`.
+- **"IP check: unknown" for everything.** The cron job has not run yet (or the vendor publishes no ranges, e.g. Anthropic). Locally: `curl "localhost:8787/cdn-cgi/handler/scheduled?cron=17+3+*+*+*"`.
 - **Everything shows "Unverified".** Your middleware sees a proxy IP. Behind Cloudflare set `trust_cloudflare_headers`; for the sensor this is automatic.
 - **Dashboard login loops.** The cookie is `Secure`; use HTTPS or `localhost`.
 - **Error 1027 on your site.** The sensor exhausted the free Worker quota and the route is "fail closed". Switch the route to fail open.
