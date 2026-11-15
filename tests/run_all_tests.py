@@ -19,6 +19,7 @@ SUITES = {
     "python": ([sys.executable, "-I", "tests/test_python_core.py"], ROOT),
     "php-detector": (["php", "tests/test_php_detector.php"], ROOT),
     "php-tracker": (["php", "tests/test_php_tracker.php"], ROOT),
+    "php-reporter": (["php", "tests/test_php_reporter.php"], ROOT),
     "worker": (["npm", "test", "--silent"], ROOT / "cloudflare"),
 }
 
