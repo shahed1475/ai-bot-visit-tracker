@@ -6,7 +6,7 @@ See which AI crawlers read your website, why they came, and which pages they too
 - **Works on your phone.** Mobile-first layout, bottom tab bar, and installable as an app from your home screen (PWA). See [`docs/MOBILE.md`](docs/MOBILE.md).
 - **Purpose, not guesswork.** OpenAI, Anthropic and Perplexity declare why they crawl in the user agent, so every visit is classified as `training`, `indexing` (search) or `retrieval` (a person asked an assistant).
 - **Spoof check.** Vendors publish their crawler IP ranges. A visit that claims to be GPTBot from another IP is flagged `unverified`.
-- **Accounts for everyone.** A public home page, a no-signup live demo (`/demo/`), signup and login. Each user gets private sites, per-site keys and their own dashboard.
+- **Accounts for everyone.** A public home page, a no-signup live demo (`/demo/`), signup and login. Each user gets private sites, named sending keys and read-only API keys, and their own dashboard.
 - **Works with any site.** Put the edge sensor in front of a site on Cloudflare (no code changes), or report from Node, Flask, Django, PHP or one HTTPS call.
 
 ```
@@ -43,7 +43,7 @@ $tracker = new AiBotTracker\AiBotTracker(['database' => ['type' => 'sqlite', 'da
 $tracker->processRequest();
 ```
 
-Node, Flask and Django can send visits to the tracker with `report: { endpoint, key, site }` (the key is the per-site key from your account). PHP calls the HTTPS endpoint (see the setup guide at `/docs/`). See each folder's README.
+Node, Flask, Django and PHP can all send visits to the tracker with `report: { endpoint, key, site }` (use a sending key from your account). See each folder's README and the setup guide at `/docs/`.
 
 ## What counts as a bot
 
@@ -61,8 +61,9 @@ Search engines (Googlebot, Bingbot) and link-preview bots (Slackbot, LinkedInBot
 
 ```bash
 python3 tests/run_all_tests.py     # registry, Node, Python (Flask + Django), PHP, Worker
+node tests/e2e/run.mjs             # end to end: a real tracker plus every integration, over real HTTP
 ```
-Needs `npm install` (root and `cloudflare/`), `pip install flask django`, and `php`. CI runs the same suites.
+Needs `npm install` (root and `cloudflare/`), `pip install flask django`, and `php`. CI runs the same suites and the end-to-end run. See [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Notes and limits
 

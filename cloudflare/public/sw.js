@@ -4,10 +4,10 @@
  *  - Only same-origin GET requests are handled.
  *  - Network first, so a new deploy shows up immediately; the cache is the offline fallback.
  * Bump VERSION to drop old caches. */
-const VERSION = 'v2';
+const VERSION = 'v4';
 const CACHE = `abt-shell-${VERSION}`;
 const SHELL = [
-  '/', '/app/', '/site.css', '/app/app.css', '/app/app.js', '/app/charts.js', '/app/demo-data.js', '/manifest.webmanifest',
+  '/', '/app/', '/site.css', '/home.css', '/theme.js', '/app/app.css', '/app/app.js', '/app/charts.js', '/app/demo-data.js', '/manifest.webmanifest',
   '/favicon.svg', '/brand/mark.svg', '/icons/icon-192.png', '/icons/icon-512.png',
   '/fonts/geist-latin-wght-normal.woff2', '/fonts/geist-mono-latin-wght-normal.woff2',
 ];

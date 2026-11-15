@@ -84,5 +84,6 @@ export async function demoApi(path, state) {
     return { cells: [...m].map(([k, hits]) => ({ d: Math.floor(k / 24), h: k % 24, hits })) };
   }
   if (path === "/api/recent") return { visits: recent.filter((v) => !state.ai || v.kind === "ai").filter((v) => state.site === "all" || SITES.find((s) => String(s.id) === state.site)?.hostname === v.site).slice(0, 25) };
+  if (path === "/api/export.json") return { visits: recent.filter((v) => !state.ai || v.kind === "ai").filter((v) => state.site === "all" || SITES.find((s) => String(s.id) === state.site)?.hostname === v.site) };
   throw new Error(`demo: no data for ${path}`);
 }

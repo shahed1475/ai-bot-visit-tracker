@@ -17,50 +17,57 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/app/app.css">
   <link rel="stylesheet" href="/site.css">
+  <link rel="stylesheet" href="/home.css">
+  <script src="/theme.js"></script>
   <script type="module" src="/site.js"></script>
 </head>
-<body>
-  <header class="wrap"><nav class="nav" aria-label="Main">
-    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
+<body class="pub home">
+    <header class="wrap"><nav class="nav" aria-label="Main">
+    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="32" height="32"> <span>AI Bot Tracker</span></a>
     <a href="/demo/">Demo</a><a href="/docs/">Docs</a>
     <a href="/login" class="js-signin">Sign in</a>
     <a class="btn primary link-btn js-cta" href="/signup">Create account</a>
   </nav></header>
-  <main id="main">
+  <main id="main" class="home-main">
+  <div class="readfield" aria-hidden="true"><span class="head tr"></span><span class="head ix"></span><span class="head rt"></span></div>
   <div class="wrap">
     <section class="hero">
-      <div>
-        <h1>See which AI bots read your website.</h1>
-        <p class="lead">Track GPTBot, ClaudeBot, PerplexityBot and more. Know who trains on your pages and who fetches them to answer someone.</p>
+      <h1>See which AI bots read your website.</h1>
+      <div class="hero-copy">
+        <p class="lead">Track GPTBot, ClaudeBot and PerplexityBot. See who trains on your pages and who fetches them to answer someone.</p>
         <div class="actions">
           <a class="btn primary large link-btn js-cta" href="/signup">Create account</a>
           <a class="btn large link-btn" href="/demo/">See the live demo</a>
         </div>
       </div>
-      <a class="shot" href="/demo/" aria-label="Open the live demo">
-        <picture>
-          <source media="(prefers-color-scheme: dark)" srcset="/img/hero-dark.webp">
-          <img src="/img/hero-light.webp" width="1360" height="860" fetchpriority="high" alt="The AI Bot Tracker dashboard: a stacked chart of visits per day split into training, search indexing and answering a person, with the share of each next to it.">
-        </picture>
-      </a>
-    </section>
-    <section class="logos" aria-label="Recognised bots">
-      <p>Recognises 40 known crawlers, including</p>
-      <div class="chips"><span class="chip">GPTBot</span><span class="chip">ChatGPT-User</span><span class="chip">OAI-SearchBot</span><span class="chip">ClaudeBot</span><span class="chip">Claude-User</span><span class="chip">Claude-SearchBot</span><span class="chip">PerplexityBot</span><span class="chip">Perplexity-User</span><span class="chip">Google-CloudVertexBot</span><span class="chip">Bytespider</span><span class="chip">Amazonbot</span><span class="chip">Meta-ExternalAgent</span><span class="chip">CCBot</span><span class="chip">Applebot</span><span class="chip">DuckAssistBot</span><span class="chip">MistralAI-User</span></div>
-    </section>
-
-    <section class="section">
-      <div class="purposes">
-        <h2>Not every AI bot wants the same thing.</h2>
-        <div class="purpose-list">
-          <div class="purpose p-training"><span class="sw p-training"></span><div><h3>Training</h3><p>Collects your pages to train AI models. You can ask these bots to stay away in robots.txt.</p><p class="examples">GPTBot, ClaudeBot, Bytespider, CCBot</p></div></div>
-          <div class="purpose p-indexing"><span class="sw p-indexing"></span><div><h3>Search indexing</h3><p>Builds the index that AI search engines pull answers from. Blocking these can take your site out of those answers.</p><p class="examples">OAI-SearchBot, Claude-SearchBot, PerplexityBot</p></div></div>
-          <div class="purpose p-retrieval"><span class="sw p-retrieval"></span><div><h3>Answering a person</h3><p>Fetches one page because someone just asked an assistant about it. Each visit is a real question.</p><p class="examples">ChatGPT-User, Claude-User, Perplexity-User</p></div></div>
-        </div>
+      <div class="stage">
+        <a class="window" href="/demo/" aria-label="Open the live demo">
+          <picture>
+            <source media="(prefers-color-scheme: dark)" srcset="/img/hero-dark.webp">
+            <img src="/img/hero-light.webp" width="1360" height="860" fetchpriority="high" alt="The AI Bot Tracker dashboard: a stacked chart of visits per day split into training, search indexing and answering a person, with the share of each next to it.">
+          </picture>
+        </a>
       </div>
     </section>
 
-    <section class="section">
+    <section class="recog" aria-label="Recognised bots">
+      <div class="marks" role="list">
+        <span class="mark m-anthropic" role="img" aria-label="Anthropic"></span><span class="mark m-perplexity" role="img" aria-label="Perplexity"></span><span class="mark m-google" role="img" aria-label="Google"></span><span class="mark m-meta" role="img" aria-label="Meta"></span><span class="mark m-apple" role="img" aria-label="Apple"></span><span class="mark m-duckduckgo" role="img" aria-label="DuckDuckGo"></span><span class="mark m-mistralai" role="img" aria-label="Mistral AI"></span><span class="mark m-bytedance" role="img" aria-label="ByteDance"></span>
+      </div>
+      <p>Recognises 40 known crawlers, including</p>
+      <p class="names">GPTBot, ChatGPT-User, OAI-SearchBot, ClaudeBot, Claude-User, Claude-SearchBot, PerplexityBot, Perplexity-User, Google-CloudVertexBot, Bytespider, Amazonbot, Meta-ExternalAgent, CCBot, Applebot, DuckAssistBot, MistralAI-User</p>
+    </section>
+
+    <section class="s purposes">
+      <h2>Not every AI bot wants the same thing.</h2>
+      <div class="lanes">
+        <article class="purpose p-training"><div class="who"><h3>Training</h3><div class="lane p-training" aria-hidden="true"><span class="lane-head"></span></div></div><div class="what"><p>Collects your pages to train AI models. You can ask these bots to stay away in robots.txt.</p><p class="examples">GPTBot, ClaudeBot, Bytespider, CCBot</p></div></article>
+        <article class="purpose p-indexing"><div class="who"><h3>Search indexing</h3><div class="lane p-indexing" aria-hidden="true"><span class="lane-head"></span></div></div><div class="what"><p>Builds the index that AI search engines pull answers from. Blocking these can take your site out of those answers.</p><p class="examples">OAI-SearchBot, Claude-SearchBot, PerplexityBot</p></div></article>
+        <article class="purpose p-retrieval"><div class="who"><h3>Answering a person</h3><div class="lane dart p-retrieval" aria-hidden="true"><span class="lane-head"></span></div></div><div class="what"><p>Fetches one page because someone just asked an assistant about it. Each visit is a real question.</p><p class="examples">ChatGPT-User, Claude-User, Perplexity-User</p></div></article>
+      </div>
+    </section>
+
+    <section class="s">
       <h2>Built for people who run websites.</h2>
       <div class="bento">
         <article class="cell c1">
@@ -68,14 +75,13 @@
           <p>Anyone can put GPTBot in a user agent. We check the visitor's IP against the ranges OpenAI, Perplexity, Google and others publish, and flag the rest as unverified.</p>
           <div class="shot"><picture><source media="(prefers-color-scheme: dark)" srcset="/img/bots-dark.webp"><img src="/img/bots-light.webp" width="523" height="340" loading="lazy" alt="A list of bots with counts. GPTBot shows 119 unverified visits and 781 verified."></picture></div>
         </article>
-        <article class="cell c5">
-          <h3>Take it with you</h3>
-          <p>Add it to your phone's home screen. Same dashboard, built for small screens.</p>
-          <div class="shot phone"><picture><source media="(prefers-color-scheme: dark)" srcset="/img/mobile-dark.webp"><img src="/img/mobile.webp" width="780" height="1688" loading="lazy" alt="The dashboard on a phone, with a bottom tab bar."></picture></div>
-        </article>
-        <article class="cell c2 tint">
+        <article class="cell c2">
           <h3>No code on Cloudflare</h3>
           <p>Paste one small Worker in front of your site. People pass straight through. Only bot visits are recorded.</p>
+          <div class="flow">
+            <div><span>People</span><div class="lane still" aria-hidden="true"></div><span class="tag">Pass through</span></div>
+            <div><span>Bots</span><div class="lane p-indexing" aria-hidden="true"><span class="lane-head"></span></div><span class="tag">Recorded</span></div>
+          </div>
           <pre class="code" tabindex="0">TRACKER_URL = <span class="js-origin">https://your-tracker.example</span>
 TRACKER_KEY = abt_your_site_key</pre>
         </article>
@@ -84,53 +90,65 @@ TRACKER_KEY = abt_your_site_key</pre>
           <p>Middleware for Node, Flask, Django and PHP, or one HTTPS call from anything else.</p>
           <div class="chips"><span class="chip">Node.js</span><span class="chip">Flask</span><span class="chip">Django</span><span class="chip">PHP</span><span class="chip">HTTPS</span></div>
         </article>
-        <article class="cell c4 tint">
+        <article class="cell c4">
           <h3>Private by design</h3>
-          <p>Query strings are dropped. Cookies and auth headers are never stored. Delete your account and every visit with it, any time.</p>
+          <p>Delete your account and every visit with it, any time.</p>
+          <dl class="stored">
+            <div><dt>Stored for each bot visit</dt><dd>Time, page path, bot, IP address, user agent, status code, country</dd></div>
+            <div><dt>Never stored</dt><dd>Query strings, cookies, authorization headers</dd></div>
+          </dl>
+        </article>
+        <article class="cell c5">
+          <h3>Take it with you</h3>
+          <p>Add it to your phone's home screen. Same dashboard, built for small screens.</p>
+          <div class="shot phone"><picture><source media="(prefers-color-scheme: dark)" srcset="/img/mobile-dark.webp"><img src="/img/mobile.webp" width="780" height="1688" loading="lazy" alt="The dashboard on a phone, with a bottom tab bar."></picture></div>
         </article>
       </div>
     </section>
 
-    <section class="section">
+    <section class="s how">
       <h2>Set up in minutes.</h2>
-      <div class="how">
-        <ol>
-          <li><h3>Add your site</h3><p>Create an account and enter your hostname. You get a private key for that site.</p></li>
-          <li><h3>Connect it</h3><p>Deploy the edge sensor, or add the middleware to your server.</p></li>
-          <li><h3>Read the results</h3><p>Bot visits appear in your dashboard within seconds.</p></li>
-        </ol>
-        <pre class="code" tabindex="0">curl -X POST <span class="js-origin">https://your-tracker.example</span>/api/ingest \
-  -H "Authorization: Bearer abt_your_site_key" \
-  -H "Content-Type: application/json" \
-  -d '{"ip":"132.196.86.5","ua":"Mozilla/5.0; compatible; GPTBot/1.4","path":"/pricing"}'</pre>
-      </div>
+      <ol class="steps">
+        <li><h3>Add your site</h3><p>Create an account and enter your hostname. You get a private key for that site.</p></li>
+        <li><h3>Connect it</h3><p>Deploy the edge sensor, or add the middleware to your server.</p></li>
+        <li><h3>Read the results</h3><p>Bot visits appear in your dashboard within seconds.</p></li>
+      </ol>
+      <pre class="code" tabindex="0"><span class="t-m">curl</span> -X POST <span class="js-origin">https://your-tracker.example</span>/api/ingest \
+  -H <span class="t-s">"Authorization: Bearer abt_your_site_key"</span> \
+  -H <span class="t-s">"Content-Type: application/json"</span> \
+  -d <span class="t-s">'{"ip":"132.196.86.5","ua":"Mozilla/5.0; compatible; GPTBot/1.4","path":"/pricing"}'</span></pre>
     </section>
 
-    <section class="section">
-      <h2>Questions</h2>
-      <div class="faq">
-        <details><summary>Will it slow down my site?</summary><p>No. The edge sensor reports a visit after your page has been served, and visitors never wait for it. If the tracker is down, your site still loads.</p></details>
-        <details><summary>Does it work if my site is not on Cloudflare?</summary><p>Yes. Use the Node, Flask, Django or PHP middleware, or call the HTTPS endpoint from your own code. The edge sensor is only for sites that Cloudflare proxies.</p></details>
-        <details><summary>What do you store?</summary><p>For each bot visit: the time, page path, bot name, the visitor's IP address, user agent, status code and country. People are ignored. Query strings, cookies and authorization headers are never stored.</p></details>
-        <details><summary>How does the IP check work?</summary><p>OpenAI, Perplexity, Google, Bing, Apple and DuckDuckGo publish the IP ranges their crawlers use. A visit that claims to be one of them from a different IP is marked unverified. Anthropic publishes no ranges, so Claude visits show as unknown.</p></details>
-        <details><summary>Can I block a bot from the dashboard?</summary><p>Not yet. The dashboard shows who visits and why. To block a bot, add it to your robots.txt or your firewall.</p></details>
-        <details><summary>How do I delete my data?</summary><p>Delete a site, or your whole account, in settings. Everything recorded for it is removed.</p></details>
-        <details><summary>Is there a limit?</summary><p>Each account can add up to 5 sites.</p></details>
+    <section class="s">
+      <div class="faq-wrap">
+        <h2>Questions</h2>
+        <div class="faq">
+          <details><summary>Will it slow down my site?</summary><p>No. The edge sensor reports a visit after your page has been served, and visitors never wait for it. If the tracker is down, your site still loads.</p></details>
+          <details><summary>Does it work if my site is not on Cloudflare?</summary><p>Yes. Use the Node, Flask, Django or PHP middleware, or call the HTTPS endpoint from your own code. The edge sensor is only for sites that Cloudflare proxies.</p></details>
+          <details><summary>What do you store?</summary><p>For each bot visit: the time, page path, bot name, the visitor's IP address, user agent, status code and country. People are ignored. Query strings, cookies and authorization headers are never stored.</p></details>
+          <details><summary>How does the IP check work?</summary><p>OpenAI, Perplexity, Google, Bing, Apple and DuckDuckGo publish the IP ranges their crawlers use. A visit that claims to be one of them from a different IP is marked unverified. Anthropic publishes no ranges, so Claude visits show as unknown.</p></details>
+          <details><summary>Can I block a bot from the dashboard?</summary><p>Not yet. The dashboard shows who visits and why. To block a bot, add it to your robots.txt or your firewall.</p></details>
+          <details><summary>How do I delete my data?</summary><p>Delete a site, or your whole account, in settings. Everything recorded for it is removed.</p></details>
+          <details><summary>Is there a limit?</summary><p>Each account can add up to 5 sites. Each account can hold up to 20 API keys.</p></details>
+        </div>
       </div>
     </section>
 
     <section class="final">
-      <h2>Find out who is reading your site.</h2>
-      <p class="sub">Create an account, add your site, and watch the first bot arrive.</p>
-      <div class="actions">
-        <a class="btn primary large link-btn js-cta" href="/signup">Create account</a>
+      <div class="final-card">
+        <div class="readfield in-card" aria-hidden="true"><span class="head tr"></span><span class="head ix"></span><span class="head rt"></span></div>
+        <h2>Find out who is reading your site.</h2>
+        <p class="sub">Create an account, add your site, and watch the first bot arrive.</p>
+        <div class="actions">
+          <a class="btn primary large link-btn js-cta" href="/signup">Create account</a>
+        </div>
       </div>
     </section>
   </div>
   </main>
   <footer class="wrap foot-site">
+    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="32" height="32"> <span>AI Bot Tracker</span></a>
     <a href="/demo/">Demo</a><a href="/docs/">Docs</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/login">Sign in</a>
-    <span class="sp">AI Bot Tracker</span>
   </footer>
 </body>
 </html>

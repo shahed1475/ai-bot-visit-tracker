@@ -12,9 +12,10 @@
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <link rel="stylesheet" href="/app/app.css">
   <link rel="stylesheet" href="/site.css">
+  <script src="/theme.js"></script>
   <script type="module" src="/site.js"></script>
 </head>
-<body>
+<body class="pub">
   <header class="wrap"><nav class="nav" aria-label="Main">
     <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
     <a href="/demo/">Demo</a><a href="/docs/">Docs</a>
@@ -24,10 +25,10 @@
   <main id="main" class="wrap"><article class="prose">
     <h1>Setup guide</h1>
     <p>Connect a site in three steps: create a site and copy its key, send visits with the edge sensor or your server code, then check the dashboard.</p>
-    <nav class="docs-nav" aria-label="On this page"><a href="#key">Get a key</a><a href="#sensor">Edge sensor</a><a href="#node">Node</a><a href="#flask">Flask</a><a href="#django">Django</a><a href="#php">PHP</a><a href="#http">HTTPS</a><a href="#check">Check it works</a></nav>
+    <nav class="docs-nav" aria-label="On this page"><a href="#key">Get a key</a><a href="#sensor">Edge sensor</a><a href="#node">Node</a><a href="#flask">Flask</a><a href="#django">Django</a><a href="#php">PHP</a><a href="#http">HTTPS</a><a href="#check">Check it works</a><a href="#read">Read your stats</a></nav>
 
     <h2 id="key">1. Get a site key</h2>
-    <p><a href="/signup">Create an account</a>, open <a href="/app/settings/">Sites and account</a>, enter your hostname (for example <code>example.com</code>) and choose Add site. Copy the key that appears. It is shown only once, and you can rotate it later.</p>
+    <p><a href="/signup">Create an account</a>, open <a href="/app/settings/">Sites and account</a>, enter your hostname (for example <code>example.com</code>) and choose Add site. Copy the key that appears. It is shown only once, and you can rotate it later. Need a separate key for another server? Create more under API keys on the same page, and revoke any of them on its own.</p>
 
     <h2 id="sensor">2a. Edge sensor (sites on Cloudflare)</h2>
     <p>No code changes. The sensor runs in front of your site, passes every request through, and reports only bot visits.</p>
@@ -61,16 +62,12 @@ AI_BOT_TRACKER = {
     &quot;report&quot;: {&quot;endpoint&quot;: &quot;https://your-tracker.example&quot;, &quot;key&quot;: os.environ[&quot;TRACKER_KEY&quot;], &quot;site&quot;: &quot;example.com&quot;},
 }</pre>
     <h2 id="php">2e. PHP</h2>
-    <p>The PHP middleware detects bots locally. Send the visit to the tracker yourself:</p>
-    <pre class="code" tabindex="0">$result = $tracker-&gt;processRequest();   // null for people
-if ($result) {
-    @file_get_contents(&#x27;https://your-tracker.example/api/ingest&#x27;, false, stream_context_create([&#x27;http&#x27; =&gt; [
-        &#x27;method&#x27; =&gt; &#x27;POST&#x27;, &#x27;timeout&#x27; =&gt; 2,
-        &#x27;header&#x27; =&gt; &quot;Authorization: Bearer &quot; . getenv(&#x27;TRACKER_KEY&#x27;) . &quot;\r\nContent-Type: application/json\r\n&quot;,
-        &#x27;content&#x27; =&gt; json_encode([&#x27;ip&#x27; =&gt; $_SERVER[&#x27;REMOTE_ADDR&#x27;], &#x27;ua&#x27; =&gt; $_SERVER[&#x27;HTTP_USER_AGENT&#x27;] ?? &#x27;&#x27;,
-                                  &#x27;path&#x27; =&gt; parse_url($_SERVER[&#x27;REQUEST_URI&#x27;], PHP_URL_PATH)]),
-    ]]));
-}</pre>
+    <p>The PHP middleware reports bot visits for you. People are ignored, and a tracker that is down never breaks your page.</p>
+    <pre class="code" tabindex="0">$tracker = new AiBotTracker\AiBotTracker([
+    &#x27;database&#x27; =&gt; false,   // report only
+    &#x27;report&#x27; =&gt; [&#x27;endpoint&#x27; =&gt; &#x27;https://your-tracker.example&#x27;, &#x27;key&#x27; =&gt; getenv(&#x27;TRACKER_KEY&#x27;), &#x27;site&#x27; =&gt; &#x27;example.com&#x27;],
+]);
+$tracker-&gt;processRequest();</pre>
     <h2 id="http">2f. Any language: one HTTPS call</h2>
     <p>Send a POST for each request, or up to 100 events at a time in <code>{"events": [...]}</code>. The key decides which site the visit belongs to. People are ignored, so you can send every request.</p>
     <pre class="code" tabindex="0">curl -X POST https://your-tracker.example/api/ingest \
@@ -80,11 +77,17 @@ if ($result) {
     <p>Fields: <code>ua</code> and <code>path</code> are required. Optional: <code>ip</code>, <code>method</code>, <code>status</code>, <code>referer</code>, <code>country</code>, <code>asn</code>, <code>asOrg</code>, <code>ts</code> (unix seconds).</p>
 
     <h2 id="check">3. Check it works</h2>
-    <p>Send the curl command above with your key, then open the <a href="/app/">dashboard</a>. A GPTBot visit appears under Training within a few seconds. If you get <code>401</code>, the key is wrong or was rotated.</p>
+    <p>Send the curl command above with your key, then open the <a href="/app/">dashboard</a>. A GPTBot visit appears under Training within a few seconds. If you get <code>401</code>, the key is wrong, was rotated or was revoked.</p>
+
+    <h2 id="read">4. Read your stats from a script</h2>
+    <p>Under API keys on the <a href="/app/settings/">Sites and account</a> page, create a <strong>read key</strong> for all your sites or for one. It can read the same numbers as the dashboard, and nothing else: it cannot send visits, change keys or open your account.</p>
+    <pre class="code" tabindex="0">curl -H &quot;Authorization: Bearer abtr_your_read_key&quot; \
+  &quot;https://your-tracker.example/api/v1/summary?range=7d&quot;</pre>
+    <p>Other endpoints: <code>timeseries</code>, <code>bots</code>, <code>pages</code>, <code>heatmap</code>, <code>recent</code>, <code>export.csv</code>, <code>export.json</code> and <code>sites</code>. Add <code>?range=24h|7d|30d|90d</code>, <code>&amp;site=ID</code> or <code>&amp;ai=0</code> to include search and social crawlers. Keep read keys out of web pages and public repositories; anyone who has one can read your stats until you revoke it.</p>
   </article></main>
   <footer class="wrap foot-site">
+    <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="32" height="32"> <span>AI Bot Tracker</span></a>
     <a href="/demo/">Demo</a><a href="/docs/">Docs</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/login">Sign in</a>
-    <span class="sp">AI Bot Tracker</span>
   </footer>
 </body>
 </html>

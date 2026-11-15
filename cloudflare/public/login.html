@@ -10,9 +10,10 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/app/app.css">
   <link rel="stylesheet" href="/site.css">
+  <script src="/theme.js"></script>
   <script type="module" src="/auth.js"></script>
 </head>
-<body data-mode="login">
+<body class="pub" data-mode="login">
   <main class="auth">
     <div class="auth-box">
       <a class="brand" href="/"><img src="/brand/mark.svg" alt="" width="28" height="28"> AI Bot Tracker</a>
@@ -31,6 +32,15 @@
       <p class="alt">New here? <a href="/signup">Create an account</a></p>
       <p class="hint"><a href="/demo/">Look at the live demo first</a></p>
     </div>
+    <aside class="auth-aside">
+      <div class="readfield in-card" aria-hidden="true"><span class="head tr"></span><span class="head ix"></span><span class="head rt"></span></div>
+      <h2>Know who reads your site.</h2>
+      <div class="lane-legend">
+        <div><h3>Training</h3><div class="lane p-training" aria-hidden="true"><span class="lane-head"></span></div><p>Collects pages to train AI models.</p></div>
+        <div><h3>Search indexing</h3><div class="lane p-indexing" aria-hidden="true"><span class="lane-head"></span></div><p>Builds the index AI search pulls answers from.</p></div>
+        <div><h3>Answering a person</h3><div class="lane dart p-retrieval" aria-hidden="true"><span class="lane-head"></span></div><p>Fetches a page because someone just asked.</p></div>
+      </div>
+    </aside>
   </main>
 </body>
 </html>

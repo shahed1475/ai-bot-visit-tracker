@@ -78,7 +78,8 @@ const expanded = new Set();
 const phone = () => matchMedia("(max-width: 720px)").matches;
 const visibleRows = (key, rows) => (phone() && !expanded.has(key) ? rows.slice(0, PHONE_ROWS) : rows);
 const showAll = (key, total, shown, rerender) => total > shown
-  ? h("button", { class: "btn more-rows", type: "button", onclick: () => { expanded.add(key); rerender(); } }, `Show all ${total}`) : null;
+  ? h("button", { class: "btn more-rows", type: "button", onclick: () => { expanded.add(key); rerender(); } }, `Show all ${total}`)
+  : document.createDocumentFragment(); // not null: replaceChildren(null) would insert the text "null"
 const empty = (msg) => h("p", { class: "empty" }, msg);
 const skeleton = (el) => el.replaceChildren(h("div", { class: "skel" }), h("div", { class: "skel" }), h("div", { class: "skel" }));
 const chip = (text, warn) => h("span", { class: `chip${warn ? " warn" : ""}` }, text);
@@ -223,6 +224,24 @@ function syncControls() {
   const q = qs();
   $("#export-csv").href = `/api/export.csv?${q}`;
   $("#export-json").href = `/api/export.json?${q}`;
+}
+
+/* The demo has no backend, so its export links build the file from the sample data in the browser (same columns, same
+   spreadsheet-formula protection as the real export). In the real dashboard these links still go to the API. */
+if (DEMO) {
+  const COLS = ["id", "ts", "site", "ip", "bot_id", "bot_name", "operator", "kind", "purpose", "verified", "path", "method", "status", "country", "asn", "as_org", "referer", "ua"];
+  const cell = (v) => { let s = v == null ? "" : String(v); if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const download = (name, type, text) => {
+    const a = h("a", { href: URL.createObjectURL(new Blob([text], { type })), download: name });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const sample = async () => (await demoApi("/api/export.json", state)).visits;
+  $("#export-json").addEventListener("click", async (e) => { e.preventDefault(); download("ai-bot-visits-demo.json", "application/json", JSON.stringify({ visits: await sample() }, null, 2)); });
+  $("#export-csv").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const rows = await sample();
+    download("ai-bot-visits-demo.csv", "text/csv", [COLS.join(","), ...rows.map((r) => COLS.map((c) => cell(c === "ts" ? new Date(r.ts * 1000).toISOString() : r[c])).join(","))].join("\n"));
+  });
 }
 
 function showLogin() { location.replace("/login?next=" + encodeURIComponent(location.pathname)); }
