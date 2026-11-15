@@ -3,7 +3,9 @@ import { randomToken, sha256Hex } from "./crypto";
 const COOKIE = "abt_session";
 const SESSION_TTL = 30 * 86400;
 const ATTRS = "Path=/; HttpOnly; Secure; SameSite=Lax";
-const LIMITS = { signupPerIp: 5, loginFailPerIp: 10, loginFailPerAccount: 20 };
+// loginFailPerAccount is a ceiling against guessing spread over many IPs. It is deliberately far above the per-IP
+// limit: a low one would let anyone who knows an email address lock its owner out.
+const LIMITS = { signupPerIp: 5, loginFailPerIp: 10, loginFailPerAccount: 100 };
 // A well-formed hash that never matches: lets login do equal work for unknown emails (no timing oracle).
 const DUMMY_HASH = `pbkdf2-sha256$100000$${btoa("\0".repeat(16))}$${btoa("\0".repeat(32))}`;
 
@@ -13,12 +15,15 @@ const json = (body: unknown, status = 200, headers?: HeadersInit) => Response.js
 const hasher = (env: Env) => env.HASHER.getByName(`h${Math.floor(Math.random() * 16)}`);
 const hourKey = (prefix: string, id: string) => `${prefix}:${id}:${Math.floor(Date.now() / 3_600_000)}`;
 
-async function count(env: Env, key: string): Promise<number> {
-  const row = await env.DB.prepare("SELECT value FROM meta WHERE key = ?").bind(key).first<{ value: string }>();
-  return row ? Number(row.value) : 0;
+/** Adds one to a counter in a single statement and returns the new value, so parallel requests cannot all read the same old number. */
+async function hit(env: Env, key: string): Promise<number> {
+  const row = await env.DB.prepare(
+    "INSERT INTO meta (key,value) VALUES (?,'1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1 RETURNING value",
+  ).bind(key).first<{ value: string }>();
+  return Number(row?.value ?? 1);
 }
-const bump = (env: Env, key: string) => env.DB.prepare(
-  "INSERT INTO meta (key,value) VALUES (?,'1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1",
+const release = (env: Env, key: string) => env.DB.prepare(
+  "UPDATE meta SET value = MAX(CAST(value AS INTEGER) - 1, 0) WHERE key = ?",
 ).bind(key).run();
 
 export function cookieToken(request: Request): string | null {
@@ -79,8 +84,7 @@ async function signup(request: Request, env: Env): Promise<Response> {
   if (!validPassword(body.password)) return json({ error: "weak_password", min: 10, max: 128 }, 400);
 
   const key = hourKey("signup", ip(request));
-  if ((await count(env, key)) >= LIMITS.signupPerIp) return json({ error: "too_many_attempts" }, 429);
-  await bump(env, key);
+  if ((await hit(env, key)) > LIMITS.signupPerIp) return json({ error: "too_many_attempts" }, 429);
   if (!(await verifyTurnstile(env, body.turnstileToken, ip(request)))) return json({ error: "captcha_failed" }, 400);
 
   if (await env.DB.prepare("SELECT 1 FROM users WHERE email = ?").bind(email).first()) return json({ error: "email_taken" }, 409);
@@ -99,15 +103,13 @@ async function login(request: Request, env: Env): Promise<Response> {
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = typeof body?.password === "string" ? body.password : "";
   const ipKey = hourKey("login-ip", ip(request)), acctKey = hourKey("login-acct", email);
-  if ((await count(env, ipKey)) >= LIMITS.loginFailPerIp || (await count(env, acctKey)) >= LIMITS.loginFailPerAccount) {
-    return json({ error: "too_many_attempts" }, 429);
-  }
+  // Count the attempt before checking the password. Counting only after a failure lets parallel guesses all pass the check.
+  const [ipTries, acctTries] = await Promise.all([hit(env, ipKey), hit(env, acctKey)]);
+  if (ipTries > LIMITS.loginFailPerIp || acctTries > LIMITS.loginFailPerAccount) return json({ error: "too_many_attempts" }, 429);
   const user = await env.DB.prepare("SELECT id, password_hash FROM users WHERE email = ?").bind(email).first<{ id: number; password_hash: string }>();
   const ok = password.length > 0 && password.length <= 128 && (await hasher(env).verify(password, user?.password_hash ?? DUMMY_HASH)) && !!user;
-  if (!ok || !user) {
-    await Promise.all([bump(env, ipKey), bump(env, acctKey)]);
-    return json({ error: "invalid_credentials" }, 401);
-  }
+  if (!ok || !user) return json({ error: "invalid_credentials" }, 401);
+  await Promise.all([release(env, ipKey), release(env, acctKey)]); // only failures count against the limits
   return json({ user: { email } }, 200, { "set-cookie": await startSession(env, user.id) });
 }
 

@@ -16,6 +16,7 @@ SUITES = {
     "registry": ([sys.executable, "-I", "tests/test_registry.py"], ROOT),
     "node": (["node", "--test", "tests/test_nodejs_middleware.js"], ROOT),
     "pwa": (["node", "--test", "tests/test_pwa_assets.js"], ROOT),
+    "safe-next": (["node", "--test", "tests/test_safe_next.js"], ROOT),
     "python": ([sys.executable, "-I", "tests/test_python_core.py"], ROOT),
     "php-detector": (["php", "tests/test_php_detector.php"], ROOT),
     "php-tracker": (["php", "tests/test_php_tracker.php"], ROOT),

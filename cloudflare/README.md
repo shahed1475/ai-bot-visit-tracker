@@ -55,6 +55,6 @@ Endpoints: `summary`, `timeseries`, `bots`, `pages`, `heatmap`, `recent`, `expor
 - Tables: `visits` (raw, 2 indexes), `visit_hourly` (rollup the dashboard reads), `api_keys`, `ip_ranges`, `meta`. Query strings are stripped before storage.
 - Each bot visit costs about 4 D1 row writes (row, two indexes, rollup). Free plan: 100,000 writes/day.
 - The dashboard sends a strict Content-Security-Policy (`public/_headers`) and builds every element with DOM APIs, because user agents and paths are attacker-controlled.
-- Login is rate limited (10 failures per IP and 20 per account per hour); signup 5 per IP per hour. Sessions are random tokens stored hashed, valid 30 days, deleted on logout.
+- Login is rate limited (10 failures per IP and 100 per account per hour; the account ceiling is high on purpose so strangers cannot lock an owner out; attempts are counted atomically); signup 5 per IP per hour. Sessions are random tokens stored hashed, valid 30 days, deleted on logout.
 - Tenant isolation: every query is scoped by the signed-in user's sites (or by the sites of the read key's owner); keys live in `api_keys`, are stored as SHA-256 hashes and are shown once. A user can hold 20 keys.
 - Deploy to Cloudflare button URL pattern: `https://deploy.workers.cloudflare.com/?url=https://github.com/<you>/<repo>/tree/main/cloudflare`

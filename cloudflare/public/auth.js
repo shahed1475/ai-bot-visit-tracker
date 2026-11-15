@@ -1,10 +1,8 @@
 // Login and signup forms. Both pages load this file; data-mode on <body> picks the endpoint.
+import { safeNext } from "/safe-next.js";
 const $ = (s) => document.querySelector(s);
 const mode = document.body.dataset.mode;
-const next = (() => {
-  const n = new URLSearchParams(location.search).get("next") || "/app/";
-  return n.startsWith("/") && !n.startsWith("//") ? n : "/app/"; // same-site paths only
-})();
+const next = safeNext(new URLSearchParams(location.search).get("next"), location.origin);
 const MESSAGES = {
   invalid_credentials: "That email or password is not correct.",
   email_taken: "An account with this email already exists. Try signing in instead.",

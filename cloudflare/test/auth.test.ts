@@ -41,6 +41,15 @@ describe("signup", () => {
   });
 });
 
+describe("signup throttling", () => {
+  it("counts attempts atomically, so parallel signups cannot exceed the per-IP limit", async () => {
+    const statuses = await Promise.all(Array.from({ length: 12 }, (_, i) =>
+      call("/api/auth/signup", { json: { email: `p${i}@example.com`, password: PW }, ip: "6.6.6.6" }).then((r) => r.status)));
+    expect(statuses.filter((s) => s === 201).length).toBeLessThanOrEqual(5);
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(7);
+  });
+});
+
 describe("login and logout", () => {
   it("logs in with the right password and rejects wrong ones identically", async () => {
     await signup("a@example.com");
@@ -60,8 +69,25 @@ describe("login and logout", () => {
     expect(last).toBe(429);
     expect((await call("/api/auth/login", { json: { email: "a@example.com", password: PW }, ip: "7.7.7.7" })).status).toBe(429);
     let acct = 0;
-    for (let i = 0; i < 21; i++) acct = (await call("/api/auth/login", { json: { email: "b@example.com", password: "wrong password!" } })).status;
+    for (let i = 0; i < 101; i++) acct = (await call("/api/auth/login", { json: { email: "b@example.com", password: "wrong password!" } })).status;
     expect(acct).toBe(429);
+  });
+  it("counts failures atomically, so parallel guesses cannot exceed the per-IP limit", async () => {
+    await signup("race@example.com");
+    const statuses = await Promise.all(Array.from({ length: 30 }, () =>
+      call("/api/auth/login", { json: { email: "race@example.com", password: "wrong password!" }, ip: "9.9.9.9" }).then((r) => r.status)));
+    expect(statuses.filter((s) => s === 401).length).toBeLessThanOrEqual(10);
+    expect(statuses.filter((s) => s === 429).length).toBeGreaterThanOrEqual(20);
+  });
+  it("does not let strangers lock the owner out of their own account", async () => {
+    await signup("victim@example.com");
+    for (let i = 0; i < 25; i++) await call("/api/auth/login", { json: { email: "victim@example.com", password: "wrong password!" } });
+    const ok = await call("/api/auth/login", { json: { email: "victim@example.com", password: PW } });
+    expect(ok.status).toBe(200);
+  });
+  it("a successful login does not use up the failure allowance", async () => {
+    await signup("ok@example.com");
+    for (let i = 0; i < 15; i++) expect((await call("/api/auth/login", { json: { email: "ok@example.com", password: PW }, ip: "8.8.8.8" })).status).toBe(200);
   });
   it("logout deletes the session row, so the old cookie stops working", async () => {
     const { cookie } = await signup("a@example.com");
